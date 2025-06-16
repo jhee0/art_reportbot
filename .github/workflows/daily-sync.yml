@@ -1,0 +1,98 @@
+name: 태스크월드 일일 동기화
+
+# 실행 트리거 설정
+on:
+  # 매일 한국시간 오전 7시 실행 (UTC 22:00)
+  schedule:
+    - cron: '0 22 * * *'
+  
+  # 수동 실행도 가능하게 설정 (테스트용)
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: '테스트 모드로 실행'
+        required: false
+        default: 'false'
+        type: boolean
+
+# 작업 정의
+jobs:
+  sync-taskworld-data:
+    name: 태스크월드 데이터 동기화
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    # 1. 코드 체크아웃
+    - name: 📥 코드 가져오기
+      uses: actions/checkout@v4
+    
+    # 2. Python 환경 설정
+    - name: 🐍 Python 3.11 설정
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    # 3. 필수 환경 변수 확인
+    - name: 🔍 환경 변수 확인
+      run: |
+        echo "환경 변수 확인 중..."
+        if [ -z "${{ secrets.TASKWORLD_EMAIL }}" ]; then
+          echo "❌ TASKWORLD_EMAIL이 설정되지 않았습니다"
+          exit 1
+        fi
+        if [ -z "${{ secrets.TASKWORLD_PASSWORD }}" ]; then
+          echo "❌ TASKWORLD_PASSWORD가 설정되지 않았습니다"
+          exit 1
+        fi
+        if [ -z "${{ secrets.GOOGLE_SPREADSHEET_ID }}" ]; then
+          echo "❌ GOOGLE_SPREADSHEET_ID가 설정되지 않았습니다"
+          exit 1
+        fi
+        if [ -z "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" ]; then
+          echo "❌ GOOGLE_CREDENTIALS_JSON이 설정되지 않았습니다"
+          exit 1
+        fi
+        echo "✅ 모든 환경 변수가 설정되어 있습니다"
+    
+    # 4. 의존성 설치
+    - name: 📚 필요한 패키지 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    # 5. 스크립트 실행
+    - name: 🚀 태스크월드 데이터 동기화 실행
+      env:
+        TASKWORLD_EMAIL: ${{ secrets.TASKWORLD_EMAIL }}
+        TASKWORLD_PASSWORD: ${{ secrets.TASKWORLD_PASSWORD }}
+        TASKWORLD_WORKSPACE_NAME: ${{ secrets.TASKWORLD_WORKSPACE_NAME }}
+        GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+        GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      run: |
+        echo "🕐 실행 시작: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+        python main.py
+        echo "🎉 실행 완료: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+    
+    # 6. 실행 결과 요약
+    - name: 📊 실행 결과 요약
+      if: always()
+      run: |
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "🕐 실행 시간: $(date '+%Y-%m-%d %H:%M:%S UTC') (UTC)"
+        echo "🕒 한국 시간: $(TZ='Asia/Seoul' date '+%Y-%m-%d %H:%M:%S KST')"
+        
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ 상태: 성공"
+          echo "🎯 결과: 태스크월드 데이터가 구글 스프레드시트에 성공적으로 업데이트되었습니다"
+        else
+          echo "❌ 상태: 실패"
+          echo "🔧 조치: Actions 탭에서 상세 로그를 확인하세요"
+        fi
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# 워크플로우 권한 설정
+permissions:
+  contents: read
+  actions: read
