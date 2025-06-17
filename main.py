@@ -66,29 +66,50 @@ class TaskworldAPI:
             logger.error(f"❌ 인증 중 오류: {str(e)}")
             return False
     
-    def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
-        """워크스페이스 이름으로 ID 찾기"""
-        try:
-            url = f"{self.api_base}/v1/space.get-all"
-            payload = {"access_token": self.access_token}
-            
-            response = requests.post(url, json=payload, timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("ok"):
-                    workspaces = data.get("spaces", [])
-                    for workspace in workspaces:
-                        if workspace_name.lower() in workspace.get("title", "").lower():
-                            space_id = workspace.get("space_id")
-                            logger.info(f"워크스페이스 발견: '{workspace.get('title')}' (ID: {space_id})")
-                            return space_id
-            
-            logger.error(f"워크스페이스를 찾을 수 없습니다: '{workspace_name}'")
-            return None
-            
-        except Exception as e:
-            logger.error(f"워크스페이스 조회 중 오류: {str(e)}")
-            return None
+def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
+    """워크스페이스 이름으로 ID 찾기"""
+    try:
+        url = f"{self.api_base}/v1/space.get-all"
+        payload = {"access_token": self.access_token}
+        
+        response = requests.post(url, json=payload, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok"):
+                workspaces = data.get("spaces", [])
+                
+                # 🔍 상세 디버깅
+                logger.info("🔍 === 워크스페이스 디버깅 정보 ===")
+                logger.info(f"총 워크스페이스 개수: {len(workspaces)}")
+                logger.info(f"찾고 있는 이름: '{workspace_name}' (길이: {len(workspace_name)})")
+                
+                for i, workspace in enumerate(workspaces):
+                    title = workspace.get("title", "Unknown")
+                    space_id = workspace.get("space_id", "Unknown")
+                    logger.info(f"{i+1}. '{title}' (ID: {space_id})")
+                    
+                    # 다양한 매칭 방식 테스트
+                    exact_match = workspace_name.lower() == title.lower()
+                    contains_match = workspace_name.lower() in title.lower()
+                    
+                    logger.info(f"   - 정확 일치: {exact_match}")
+                    logger.info(f"   - 포함 일치: {contains_match}")
+                
+                logger.info("=================================")
+                
+                # 기존 로직으로 찾기 시도
+                for workspace in workspaces:
+                    if workspace_name.lower() in workspace.get("title", "").lower():
+                        space_id = workspace.get("space_id")
+                        logger.info(f"✅ 매칭된 워크스페이스: '{workspace.get('title')}' (ID: {space_id})")
+                        return space_id
+        
+        logger.error(f"❌ 워크스페이스를 찾을 수 없습니다: '{workspace_name}'")
+        return None
+        
+    except Exception as e:
+        logger.error(f"워크스페이스 조회 중 오류: {str(e)}")
+        return None
     
     def get_projects(self, space_id: str) -> List[Dict]:
         """프로젝트 목록 조회"""
