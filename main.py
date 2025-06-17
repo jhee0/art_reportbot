@@ -212,10 +212,10 @@ def format_taskworld_data(projects: List[Dict], all_tasks: Dict[str, List[Dict]]
     # 헤더 행
     headers = [
         "업데이트 시간",
-        "프로젝트 ID",
+        "프로젝트 ID", 
         "프로젝트 이름",
         "태스크 ID",
-        "태스크 이름",
+        "태스크 이름", 
         "상태",
         "담당자",
         "생성일",
@@ -281,7 +281,7 @@ def main():
         taskworld_email = os.environ.get('TASKWORLD_EMAIL')
         taskworld_password = os.environ.get('TASKWORLD_PASSWORD')
         workspace_name = os.environ.get('TASKWORLD_WORKSPACE_NAME', '아트실 일정 - 2025 6주기')
-        github_token = os.environ.get('PERSONAL_ACCESS_TOKEN')
+        github_token = os.environ.get('GITHUB_TOKEN')
         repo_owner = os.environ.get('GITHUB_REPOSITORY_OWNER')
         repo_name = os.environ.get('GITHUB_REPOSITORY_NAME', 'taskworld-automation')
         
@@ -292,7 +292,7 @@ def main():
         if not taskworld_password:
             missing_vars.append('TASKWORLD_PASSWORD')
         if not github_token:
-            missing_vars.append('PERSONAL_ACCESS_TOKEN')
+            missing_vars.append('GITHUB_TOKEN')
         if not repo_owner:
             missing_vars.append('GITHUB_REPOSITORY_OWNER')
             

@@ -46,8 +46,8 @@ jobs:
           echo "❌ TASKWORLD_PASSWORD가 설정되지 않았습니다"
           exit 1
         fi
-        if [ -z "${{ secrets.PERSONAL_ACCESS_TOKEN }}" ]; then
-          echo "❌ PERSONAL_ACCESS_TOKEN이 설정되지 않았습니다"
+        if [ -z "${{ secrets.GITHUB_TOKEN }}" ]; then
+          echo "❌ GITHUB_TOKEN이 설정되지 않았습니다"
           exit 1
         fi
         echo "✅ 모든 환경 변수가 설정되어 있습니다"
@@ -64,7 +64,7 @@ jobs:
         TASKWORLD_EMAIL: ${{ secrets.TASKWORLD_EMAIL }}
         TASKWORLD_PASSWORD: ${{ secrets.TASKWORLD_PASSWORD }}
         TASKWORLD_WORKSPACE_NAME: ${{ secrets.TASKWORLD_WORKSPACE_NAME }}
-        PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: |
