@@ -26,7 +26,7 @@ your-password-here
 - 태스크월드에서 보이는 이름 그대로 입력
 - 예시: `마케팅팀 프로젝트`, `개발 스프린트 2025`
 
-### 4. GITHUB_TOKEN
+### 4. PERSONAL_ACCESS_TOKEN
 ```
 ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
@@ -61,6 +61,7 @@ ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 - [ ] 4개 Secrets 모두 입력 완료
 - [ ] GitHub Personal Access Token 생성
 - [ ] Token에 repo 권한 부여
+- [ ] `PERSONAL_ACCESS_TOKEN` Secret 설정 완료
 - [ ] 테스트 실행 성공
 
 ### 선택 단계
@@ -78,7 +79,7 @@ ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 - **정기적으로 비밀번호와 토큰 변경하세요**
 
 ### 권한
-- **GitHub Token에는 repo 권한만 부여하세요**
+- **Personal Access Token에는 repo 권한만 부여하세요**
 - **불필요한 권한은 제거하세요**
 
 ### 테스트
