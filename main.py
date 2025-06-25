@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-태스크월드 → GitHub CSV 자동화 (카드 등록 불필요)
-구글 클라우드 대신 GitHub 저장소에 CSV 파일 직접 저장
+태스크월드 → 구글 스프레드시트 자동화
+매일 7시에 태스크월드 데이터를 가져와서 구글 스프레드시트에 업데이트
 """
 
 import os
 import json
 import logging
 import requests
-import csv
-import base64
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import gspread
+from google.oauth2.service_account import Credentials
 
 # 로깅 설정
 logging.basicConfig(
@@ -62,12 +62,39 @@ class TaskworldAPI:
                 logger.error(f"❌ HTTP 에러: {response.status_code} - {response.text}")
                 return False
                 
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ 네트워크 오류: {str(e)}")
+            return False
         except Exception as e:
             logger.error(f"❌ 인증 중 오류: {str(e)}")
             return False
     
-def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
-    """워크스페이스 이름으로 ID 찾기"""
+    def get_workspaces(self) -> List[Dict]:
+        """워크스페이스 목록 조회"""
+        if not self.access_token:
+            logger.error("인증이 필요합니다")
+            return []
+            
+        try:
+            url = f"{self.api_base}/v1/space.get-all"
+            payload = {"access_token": self.access_token}
+            
+            response = requests.post(url, json=payload, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("ok"):
+                    workspaces = data.get("spaces", [])
+                    logger.info(f"워크스페이스 {len(workspaces)}개 발견")
+                    return workspaces
+            
+            logger.warning("워크스페이스 조회 실패")
+            return []
+            
+        except Exception as e:
+            logger.error(f"워크스페이스 조회 중 오류: {str(e)}")
+            return []
+    
+    def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
     try:
         url = f"{self.api_base}/v1/space.get-all"
         payload = {"access_token": self.access_token}
@@ -78,41 +105,41 @@ def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
             if data.get("ok"):
                 workspaces = data.get("spaces", [])
                 
-                # 🔍 상세 디버깅
-                logger.info("🔍 === 워크스페이스 디버깅 정보 ===")
-                logger.info(f"총 워크스페이스 개수: {len(workspaces)}")
-                logger.info(f"찾고 있는 이름: '{workspace_name}' (길이: {len(workspace_name)})")
+                # 🔍 디버깅: 모든 워크스페이스 출력
+                logger.info("=== 접근 가능한 워크스페이스 목록 ===")
+                for i, ws in enumerate(workspaces):
+                    logger.info(f"{i+1}. '{ws.get('title', 'Unknown')}'")
+                logger.info("================================")
                 
-                for i, workspace in enumerate(workspaces):
-                    title = workspace.get("title", "Unknown")
-                    space_id = workspace.get("space_id", "Unknown")
-                    logger.info(f"{i+1}. '{title}' (ID: {space_id})")
-                    
-                    # 다양한 매칭 방식 테스트
-                    exact_match = workspace_name.lower() == title.lower()
-                    contains_match = workspace_name.lower() in title.lower()
-                    
-                    logger.info(f"   - 정확 일치: {exact_match}")
-                    logger.info(f"   - 포함 일치: {contains_match}")
-                
-                logger.info("=================================")
-                
-                # 기존 로직으로 찾기 시도
                 for workspace in workspaces:
                     if workspace_name.lower() in workspace.get("title", "").lower():
                         space_id = workspace.get("space_id")
-                        logger.info(f"✅ 매칭된 워크스페이스: '{workspace.get('title')}' (ID: {space_id})")
+                        logger.info(f"워크스페이스 발견: '{workspace.get('title')}' (ID: {space_id})")
                         return space_id
         
-        logger.error(f"❌ 워크스페이스를 찾을 수 없습니다: '{workspace_name}'")
+        logger.error(f"워크스페이스를 찾을 수 없습니다: '{workspace_name}'")
         return None
+    
+        """워크스페이스 이름으로 ID 찾기"""
+        workspaces = self.get_workspaces()
+        for workspace in workspaces:
+            if workspace_name.lower() in workspace.get("title", "").lower():
+                space_id = workspace.get("space_id")
+                logger.info(f"워크스페이스 발견: '{workspace.get('title')}' (ID: {space_id})")
+                return space_id
         
-    except Exception as e:
-        logger.error(f"워크스페이스 조회 중 오류: {str(e)}")
+        logger.error(f"워크스페이스를 찾을 수 없습니다: '{workspace_name}'")
+        logger.info("사용 가능한 워크스페이스:")
+        for ws in workspaces:
+            logger.info(f"  - {ws.get('title', 'Unknown')}")
         return None
     
     def get_projects(self, space_id: str) -> List[Dict]:
         """프로젝트 목록 조회"""
+        if not self.access_token:
+            logger.error("인증이 필요합니다")
+            return []
+            
         try:
             url = f"{self.api_base}/v1/project.get-all"
             payload = {
@@ -128,6 +155,7 @@ def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
                     logger.info(f"프로젝트 {len(projects)}개 발견")
                     return projects
             
+            logger.warning("프로젝트 조회 실패")
             return []
             
         except Exception as e:
@@ -136,6 +164,10 @@ def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
     
     def get_project_tasks(self, space_id: str, project_id: str) -> List[Dict]:
         """프로젝트의 태스크 목록 조회"""
+        if not self.access_token:
+            logger.error("인증이 필요합니다")
+            return []
+            
         try:
             url = f"{self.api_base}/v1/task.get-all"
             payload = {
@@ -156,79 +188,75 @@ def find_workspace_by_name(self, workspace_name: str) -> Optional[str]:
             logger.error(f"태스크 조회 중 오류: {str(e)}")
             return []
 
-class GitHubStorage:
-    """GitHub 저장소에 CSV 파일 저장"""
+class GoogleSheetsUpdater:
+    """구글 스프레드시트 업데이트 클래스"""
     
-    def __init__(self, repo_owner: str, repo_name: str, github_token: str):
-        self.repo_owner = repo_owner
-        self.repo_name = repo_name
-        self.github_token = github_token
-        self.api_base = "https://api.github.com"
-    
-    def save_csv_to_github(self, csv_data: List[List[Any]], filename: str) -> bool:
-        """CSV 데이터를 GitHub 저장소에 저장"""
+    def __init__(self, credentials_json: str, spreadsheet_id: str):
+        self.credentials_json = credentials_json
+        self.spreadsheet_id = spreadsheet_id
+        self.client = None
+        
+    def authenticate(self) -> bool:
+        """구글 스프레드시트 인증"""
         try:
-            # CSV 내용 생성
-            csv_content = ""
-            for row in csv_data:
-                csv_content += ",".join([f'"{str(cell)}"' for cell in row]) + "\n"
+            # JSON 문자열을 파싱
+            creds_dict = json.loads(self.credentials_json)
             
-            # Base64 인코딩
-            content_encoded = base64.b64encode(csv_content.encode('utf-8')).decode('utf-8')
+            # 서비스 계정 인증
+            creds = Credentials.from_service_account_info(
+                creds_dict,
+                scopes=['https://www.googleapis.com/auth/spreadsheets']
+            )
             
-            # GitHub API로 파일 저장
-            url = f"{self.api_base}/repos/{self.repo_owner}/{self.repo_name}/contents/data/{filename}"
+            self.client = gspread.authorize(creds)
+            logger.info("✅ 구글 스프레드시트 인증 성공")
+            return True
             
-            # 기존 파일 있는지 확인 (업데이트를 위해 SHA 필요)
-            existing_file = self._get_file_sha(f"data/{filename}")
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON 파싱 오류: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ 구글 스프레드시트 인증 실패: {str(e)}")
+            return False
+    
+    def update_sheet_with_data(self, data: List[List[Any]], sheet_name: str = "TaskworldData") -> bool:
+        """데이터로 시트 업데이트"""
+        try:
+            # 스프레드시트 열기
+            spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+            logger.info(f"스프레드시트 열기 성공: {spreadsheet.title}")
             
-            payload = {
-                "message": f"📊 태스크월드 데이터 업데이트 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                "content": content_encoded,
-                "branch": "main"
-            }
+            # 워크시트 가져오기 또는 생성
+            try:
+                worksheet = spreadsheet.worksheet(sheet_name)
+                logger.info(f"기존 시트 사용: {sheet_name}")
+            except gspread.WorksheetNotFound:
+                worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
+                logger.info(f"새 시트 생성: {sheet_name}")
             
-            if existing_file:
-                payload["sha"] = existing_file  # 기존 파일 업데이트
+            # 기존 데이터 모두 삭제
+            worksheet.clear()
             
-            headers = {
-                "Authorization": f"token {self.github_token}",
-                "Accept": "application/vnd.github.v3+json"
-            }
-            
-            response = requests.put(url, json=payload, headers=headers)
-            
-            if response.status_code in [200, 201]:
-                download_url = f"https://github.com/{self.repo_owner}/{self.repo_name}/blob/main/data/{filename}"
-                logger.info(f"✅ GitHub에 저장 완료: {download_url}")
+            # 새 데이터 업데이트
+            if data and len(data) > 0:
+                # 셀 범위 계산 (A1부터 필요한 만큼)
+                end_col = chr(ord('A') + len(data[0]) - 1)  # 열 개수에 따라 계산
+                end_row = len(data)
+                range_name = f"A1:{end_col}{end_row}"
+                
+                worksheet.update(range_name, data)
+                logger.info(f"✅ 스프레드시트 업데이트 완료: {len(data)}행 {len(data[0])}열")
                 return True
             else:
-                logger.error(f"❌ GitHub 저장 실패: {response.status_code} - {response.text}")
+                logger.warning("업데이트할 데이터가 없습니다")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ GitHub 저장 중 오류: {str(e)}")
+            logger.error(f"❌ 스프레드시트 업데이트 실패: {str(e)}")
             return False
-    
-    def _get_file_sha(self, file_path: str) -> Optional[str]:
-        """기존 파일의 SHA 값 조회 (업데이트용)"""
-        try:
-            url = f"{self.api_base}/repos/{self.repo_owner}/{self.repo_name}/contents/{file_path}"
-            headers = {
-                "Authorization": f"token {self.github_token}",
-                "Accept": "application/vnd.github.v3+json"
-            }
-            
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                return response.json().get("sha")
-            return None
-            
-        except Exception:
-            return None
 
 def format_taskworld_data(projects: List[Dict], all_tasks: Dict[str, List[Dict]]) -> List[List[Any]]:
-    """태스크월드 데이터를 CSV 형태로 변환"""
+    """태스크월드 데이터를 스프레드시트 형태로 변환"""
     
     # 헤더 행
     headers = [
@@ -295,16 +323,15 @@ def format_taskworld_data(projects: List[Dict], all_tasks: Dict[str, List[Dict]]
 
 def main():
     """메인 실행 함수"""
-    logger.info("🚀 태스크월드 자동화 시작 (GitHub 저장 방식)")
+    logger.info("🚀 태스크월드 자동화 시작")
     
     try:
         # 환경 변수에서 설정 읽기
         taskworld_email = os.environ.get('TASKWORLD_EMAIL')
         taskworld_password = os.environ.get('TASKWORLD_PASSWORD')
         workspace_name = os.environ.get('TASKWORLD_WORKSPACE_NAME', '아트실 일정 - 2025 6주기')
-        github_token = os.environ.get('PERSONAL_ACCESS_TOKEN')
-        repo_owner = os.environ.get('GITHUB_REPOSITORY_OWNER')
-        repo_name = os.environ.get('GITHUB_REPOSITORY_NAME', 'taskworld-automation')
+        google_spreadsheet_id = os.environ.get('GOOGLE_SPREADSHEET_ID')
+        google_credentials_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
         
         # 필수 환경 변수 확인
         missing_vars = []
@@ -312,10 +339,10 @@ def main():
             missing_vars.append('TASKWORLD_EMAIL')
         if not taskworld_password:
             missing_vars.append('TASKWORLD_PASSWORD')
-        if not github_token:
-            missing_vars.append('PERSONAL_ACCESS_TOKEN')
-        if not repo_owner:
-            missing_vars.append('GITHUB_REPOSITORY_OWNER')
+        if not google_spreadsheet_id:
+            missing_vars.append('GOOGLE_SPREADSHEET_ID')
+        if not google_credentials_json:
+            missing_vars.append('GOOGLE_CREDENTIALS_JSON')
             
         if missing_vars:
             raise Exception(f"필수 환경 변수가 설정되지 않았습니다: {', '.join(missing_vars)}")
@@ -352,16 +379,16 @@ def main():
         formatted_data = format_taskworld_data(projects, all_tasks)
         logger.info(f"데이터 포맷팅 완료: {len(formatted_data)}행")
         
-        # 6. GitHub에 CSV 저장
-        github_storage = GitHubStorage(repo_owner, repo_name, github_token)
-        filename = f"taskworld-{datetime.now().strftime('%Y-%m-%d')}.csv"
+        # 6. 구글 스프레드시트 업데이트
+        sheets_updater = GoogleSheetsUpdater(google_credentials_json, google_spreadsheet_id)
+        if not sheets_updater.authenticate():
+            raise Exception("구글 스프레드시트 인증 실패")
         
-        if github_storage.save_csv_to_github(formatted_data, filename):
-            logger.info("🎉 자동화 완료! GitHub에 CSV 파일이 저장되었습니다.")
-            print(f"✅ 성공: {len(formatted_data)-1}개 항목이 저장되었습니다")
-            print(f"📁 파일 위치: https://github.com/{repo_owner}/{repo_name}/blob/main/data/{filename}")
+        if sheets_updater.update_sheet_with_data(formatted_data):
+            logger.info("🎉 자동화 완료! 구글 스프레드시트가 업데이트되었습니다.")
+            print(f"✅ 성공: {len(formatted_data)-1}개 항목이 업데이트되었습니다")
         else:
-            raise Exception("GitHub 저장 실패")
+            raise Exception("스프레드시트 업데이트 실패")
             
     except Exception as e:
         logger.error(f"❌ 자동화 실패: {str(e)}")
