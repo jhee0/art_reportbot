@@ -1,0 +1,13 @@
+# 환경변수 파일 (절대 GitHub에 업로드 안됨)
+.env
+
+# Python 관련
+__pycache__/
+*.pyc
+*.pyo
+
+# 로그 파일
+*.log
+
+# 테스트 파일
+test_*.csv
