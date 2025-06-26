@@ -1,0 +1,49 @@
+# .github/workflows/daily-report.yml
+name: Daily Art Room Report
+
+on:
+  schedule:
+    # 매일 한국시간 오전 7시 (UTC 22시)
+    - cron: '0 22 * * *'
+  
+  # 수동 실행도 가능하게
+  workflow_dispatch:
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Download from Taskworld
+      run: |
+        # TODO: 태스크월드 API 호출로 CSV 다운로드
+        # 현재는 수동 업로드된 파일 사용
+        echo "Taskworld API 연동 예정"
+        # python download_taskworld_data.py
+    
+    - name: Generate and send report
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+        TASKWORLD_API_TOKEN: ${{ secrets.TASKWORLD_API_TOKEN }}
+      run: |
+        python slack_report_bot.py "taskworld_data.csv"
+    
+    - name: Upload logs (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: error-logs
+        path: "*.log"
