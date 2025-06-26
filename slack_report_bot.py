@@ -305,7 +305,9 @@ class ArtRoomReportBot:
 
 # 사용 예제
 if __name__ == "__main__":
-    # 환경 변수에서 토큰 읽기 (보안)
+    import sys
+    
+    # 환경 변수에서 토큰 읽기
     SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
     CHANNEL_NAME = os.getenv("SLACK_CHANNEL", "#아트실")
     
@@ -316,9 +318,11 @@ if __name__ == "__main__":
     # 봇 인스턴스 생성
     bot = ArtRoomReportBot(SLACK_BOT_TOKEN, CHANNEL_NAME)
     
-    # 수동 실행 예제
-    input_file = input("입력 CSV 파일 경로: ").strip().strip('"').strip("'")
-    bot.run_daily_report(input_file)
+    # 명령행 인수 또는 기본값 사용
+    if len(sys.argv) > 1:
+        input_file = sys.argv[1]  # GitHub Actions에서 전달
+    else:
+        # 로컬 테스트용 (대화형)
+        input_file = input("입력 CSV 파일 경로: ").strip().strip('"').strip("'")
     
-    # 자동화 시에는 이렇게:
-    # bot.run_daily_report("downloaded_taskworld_data.csv")
+    bot.run_daily_report(input_file)
