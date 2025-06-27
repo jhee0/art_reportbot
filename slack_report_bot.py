@@ -222,13 +222,6 @@ class ArtRoomReportBot:
                         "type": "mrkdwn",
                         "text": f"*🚨 오류 내용:*\n```{error_message}```"
                     }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "🔄 *다음 시도:* 30분 후 자동 재시도\n👨‍💻 *지속 문제 시:* 개발팀에 문의"
-                    }
                 }
             ]
             
