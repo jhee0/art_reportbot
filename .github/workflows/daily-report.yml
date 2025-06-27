@@ -32,6 +32,13 @@ jobs:
         # 현재는 수동 업로드된 파일 사용
         echo "Taskworld API 연동 예정"
         # python download_taskworld_data.py
+
+        # === 1단계 테스트 (임시) ===
+        echo "🧪 Selenium 파일 존재 확인..."
+        ls -la selenium_taskworld_downloader.py
+        echo "🐍 Python 파일 문법 확인..."
+        python -m py_compile selenium_taskworld_downloader.py
+        echo "✅ 1단계 테스트 완료!"
     
     - name: Generate and send report
       env:
