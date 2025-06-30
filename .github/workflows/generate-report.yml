@@ -3,8 +3,8 @@ name: generate-report
 on:
   schedule:
     # 평일 한국시간 오전 7시 (UTC 22시, 전날)
-    #- cron: '0 22 * * 0-4'  # 일요일-목요일 UTC 22시 = 월요일-금요일 KST 7시
-    - cron: '* * * * *'  # 매분 실행 (테스트용)
+    - cron: '0 22 * * 0-4'  # 일요일-목요일 UTC 22시 = 월요일-금요일 KST 7시
+    #- cron: '* * * * *'  # 매분 실행 (테스트용)
   
   # 수동 실행도 가능하게
   workflow_dispatch:
