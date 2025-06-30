@@ -920,6 +920,13 @@ def debug_file_system():
 # 사용 예제
 if __name__ == "__main__":
     # 먼저 파일 시스템 상태 확인
+
+    print("🔍 환경변수 확인:")
+    print(f"📧 TASKWORLD_EMAIL: {'설정됨' if os.getenv('TASKWORLD_EMAIL') else '❌ 없음'}")
+    print(f"🔒 TASKWORLD_PASSWORD: {'설정됨' if os.getenv('TASKWORLD_PASSWORD') else '❌ 없음'}")
+    print(f"🤖 SLACK_BOT_TOKEN: {'설정됨' if os.getenv('SLACK_BOT_TOKEN') else '❌ 없음'}")
+    print(f"💬 SLACK_CHANNEL: {os.getenv('SLACK_CHANNEL', '❌ 없음')}")
+    
     print("🔍 현재 파일 시스템 상태:")
     debug_file_system()
     print("=" * 60)
