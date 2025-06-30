@@ -317,6 +317,9 @@ class TaskworldSeleniumDownloader:
             
             # 지정된 열만 선택 (B, C, K, N 순서로)
             selected_df = df_filtered[columns]
+
+            # ⭐ 검증 단계 추가 ⭐
+            validation_issues = self.validate_csv_data(selected_df, min_hours=160)
             
             # 새로운 CSV 파일명 생성 (설정 변수 사용)
             output_file = OUTPUT_FILENAME
@@ -331,12 +334,13 @@ class TaskworldSeleniumDownloader:
             
             print(f"✅ CSV 처리 완료: {len(selected_df)}행 저장 → {output_file}")
             
-            return selected_df, removed_count, output_file
+            # ⭐ 반환값 수정 (validation_issues 추가) ⭐
+            return selected_df, removed_count, output_file, validation_issues
             
         except Exception as e:
             error_msg = f"CSV 처리 중 오류: {str(e)}"
             print(f"❌ {error_msg}")
-            return None, None, error_msg
+            return None, None, error_msg, []  # ⭐ 빈 리스트 추가 ⭐
 
 
     def send_to_slack(self, csv_file_path, stats=None, error_message=None):
