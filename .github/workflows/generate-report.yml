@@ -1,0 +1,51 @@
+name: generate-report
+
+on:
+  schedule:
+    # 평일 한국시간 오전 7시 (UTC 22시, 전날)
+    - cron: '0 22 * * 0-4'  # 일요일-목요일 UTC 22시 = 월요일-금요일 KST 7시
+  
+  # 수동 실행도 가능하게
+  workflow_dispatch:
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        pip install selenium pandas python-dotenv slack-sdk
+        
+    - name: Install Chrome
+      run: |
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        
+    - name: Download from Taskworld
+      env:
+        TASKWORLD_EMAIL: ${{ secrets.TASKWORLD_EMAIL }}
+        TASKWORLD_PASSWORD: ${{ secrets.TASKWORLD_PASSWORD }}
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+      run: |
+        python selenium_taskworld_downloader.py
+        
+    - name: Upload logs (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: error-logs
+        path: |
+          *.log
+          *.csv
