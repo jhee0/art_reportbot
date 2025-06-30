@@ -24,7 +24,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install selenium pandas python-dotenv slack-sdk
-
+        
     - name: Install Chrome
       run: |
         sudo apt-get update
@@ -41,7 +41,7 @@ jobs:
         
     - name: Upload logs (if failed)
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # v3 → v4로 업데이트
       with:
         name: error-logs
         path: |
