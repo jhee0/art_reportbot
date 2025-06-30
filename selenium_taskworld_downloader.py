@@ -323,10 +323,10 @@ class TaskworldSeleniumDownloader:
                 
             return validation_issues
         
-    except Exception as e:
-        error_msg = f"검증 중 오류 발생: {str(e)}"
-        print(f"❌ {error_msg}")
-        return [error_msg]
+        except Exception as e:
+            error_msg = f"검증 중 오류 발생: {str(e)}"
+            print(f"❌ {error_msg}")
+            return [error_msg]
 
 
     
