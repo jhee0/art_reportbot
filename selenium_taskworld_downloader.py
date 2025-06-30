@@ -280,119 +280,221 @@ class TaskworldSeleniumDownloader:
             print(f"📄 현재 URL: {self.driver.current_url}")
             return False
 
+    def load_allowed_tags(self):
+        """허용된 태그 목록 파일에서 로드"""
+        try:
+            # first_tags.txt 파일 읽기
+            try:
+                with open('first_tags.txt', 'r', encoding='utf-8') as f:
+                    first_tags = [line.strip() for line in f if line.strip()]
+            except FileNotFoundError:
+                print("❌ 검증을 위한 first_tags.txt 파일을 확인해주세요.")
+                exit(1)
+            
+            # second_tags.txt 파일 읽기
+            try:
+                with open('second_tags.txt', 'r', encoding='utf-8') as f:
+                    second_tags = [line.strip() for line in f if line.strip()]
+            except FileNotFoundError:
+                print("❌ 검증을 위한 second_tags.txt 파일을 확인해주세요.")
+                exit(1)
+            
+            print(f"✅ 태그 설정 로드 완료: 첫번째 태그 {len(first_tags)}개, 두번째 태그 {len(second_tags)}개")
+            return first_tags, second_tags
+            
+        except Exception as e:
+            print(f"❌ 태그 설정 파일 읽기 실패: {e}")
+            exit(1)
+    
+    def validate_tags(self, df, first_tags, second_tags):
+        """C열 태그 검증"""
+        tag_validation_issues = []
+        
+        try:
+            print("🏷️ C열 태그 검증 시작...")
+            
+            # 태그 열이 존재하는지 확인
+            if 'Tags' not in df.columns:
+                tag_validation_issues.append("Tags 열이 존재하지 않습니다.")
+                return tag_validation_issues
+            
+            # 각 행별로 태그 검증
+            for idx, row in df.iterrows():
+                person_name = row['Tasklist']  # A열 이름
+                tags = row['Tags']  # C열 태그
+                
+                # 태그가 비어있거나 NaN인 경우 건너뛰기
+                if pd.isna(tags) or tags == '' or tags == 0:
+                    continue
+                
+                # 이름 그룹핑 (기존 로직과 동일)
+                if pd.isna(person_name) or person_name == '':
+                    person_group = '미분류'
+                else:
+                    name_str = str(person_name).strip()
+                    person_group = name_str[:3] if len(name_str) >= 3 else name_str
+                
+                # 태그를 쉼표로 분리
+                tag_list = str(tags).split(',')
+                tag_list = [tag.strip() for tag in tag_list if tag.strip()]  # 공백 제거 및 빈 값 제거
+                
+                if len(tag_list) == 0:
+                    continue  # 태그가 없으면 건너뛰기
+                
+                # 첫 번째 태그 검증 (부분 일치)
+                first_tag = tag_list[0]
+                first_tag_valid = False
+                
+                for allowed_first in first_tags:
+                    if first_tag.startswith(allowed_first):
+                        first_tag_valid = True
+                        break
+                
+                if not first_tag_valid:
+                    issue_msg = f"{person_group}님 태그 오류 (첫번째 태그: '{first_tag}')"
+                    if issue_msg not in tag_validation_issues:  # 중복 방지
+                        tag_validation_issues.append(issue_msg)
+                    continue  # 첫 번째 태그가 틀리면 두 번째는 확인하지 않음
+                
+                # 두 번째 태그 검증 (완전 일치) - 태그가 2개 이상일 때만
+                if len(tag_list) >= 2:
+                    second_tag = tag_list[1]
+                    
+                    if second_tag not in second_tags:
+                        issue_msg = f"{person_group}님 태그 오류 (두번째 태그: '{second_tag}')"
+                        if issue_msg not in tag_validation_issues:  # 중복 방지
+                            tag_validation_issues.append(issue_msg)
+            
+            if tag_validation_issues:
+                print(f"❌ {len(tag_validation_issues)}개의 태그 검증 이슈 발견")
+                for issue in tag_validation_issues:
+                    print(f"  - {issue}")
+            else:
+                print("✅ 모든 태그 검증 통과!")
+            
+            return tag_validation_issues
+            
+        except Exception as e:
+            error_msg = f"태그 검증 중 오류 발생: {str(e)}"
+            print(f"❌ {error_msg}")
+            return [error_msg]
+    
     def validate_csv_data(self, df, min_hours=160):
         """
-        CSV 데이터 검증 - A열(Tasklist) 기준으로 D열(Time Spent) 합계 확인
-        - 이름 앞 3글자로 그룹핑 (송민석, 송민석_완료 → 송민석으로 통합)
-        - 시간 포맷 (HH:MM:SS) 처리 및 시간 단위로 변환
-        - 기준값과 정확히 일치하지 않는 경우만 오류로 판단
+        CSV 데이터 검증 - 시간 합계 + 태그 검증
         """
-        validation_issues = []
-        
         try:
             print("🔍 CSV 데이터 검증 시작...")
             
             if len(df.columns) < 4:
-                validation_issues.append("❌ 열 수가 부족합니다. 최소 4개 열이 필요합니다.")
-                return validation_issues
+                return ["❌ 열 수가 부족합니다. 최소 4개 열이 필요합니다."]
             
-            # 열 이름 설정 (헤더가 없으므로 인덱스 사용)
+            # 열 이름 설정
             df.columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
             
-            # 시간 포맷 변환 함수
-            def convert_time_to_hours(time_str):
-                """시간 문자열 (HH:MM:SS)을 시간 단위로 변환"""
-                try:
-                    if pd.isna(time_str) or time_str == '' or time_str == 0:
-                        return 0.0
-                    
-                    # 문자열로 변환
-                    time_str = str(time_str).strip()
-                    
-                    # HH:MM:SS 형태인지 확인
-                    if ':' in time_str:
-                        parts = time_str.split(':')
-                        if len(parts) == 3:
-                            hours = int(parts[0])
-                            minutes = int(parts[1])
-                            seconds = int(parts[2])
-                            # 시간으로 변환 (소수점 첫째자리까지)
-                            total_hours = hours + (minutes / 60.0) + (seconds / 3600.0)
-                            return round(total_hours, 1)
-                        elif len(parts) == 2:
-                            # MM:SS 형태인 경우
-                            minutes = int(parts[0])
-                            seconds = int(parts[1])
-                            total_hours = (minutes / 60.0) + (seconds / 3600.0)
-                            return round(total_hours, 1)
-                    
-                    # 숫자로만 되어 있는 경우 (이미 시간 단위라고 가정)
-                    return round(float(time_str), 1)
-                    
-                except (ValueError, IndexError, TypeError):
-                    print(f"⚠️ 시간 변환 실패: '{time_str}' - 0으로 처리")
-                    return 0.0
+            # 1. 태그 설정 로드
+            first_tags, second_tags = self.load_allowed_tags()
             
-            # 이름 그룹핑 함수
-            def get_name_group(tasklist_name):
-                """이름 앞 3글자로 그룹핑"""
-                if pd.isna(tasklist_name) or tasklist_name == '':
-                    return '미분류'
-                
-                name_str = str(tasklist_name).strip()
-                # 앞 3글자 추출 (한글 기준)
-                if len(name_str) >= 3:
-                    return name_str[:3]
-                else:
-                    return name_str
+            # 2. 시간 검증 (기존 로직)
+            validation_issues = self._validate_time_totals(df, min_hours)
             
-            # Time_Spent 열을 시간으로 변환
-            print("⏱️ 시간 데이터 변환 중...")
-            df['Time_Hours'] = df['Time_Spent'].apply(convert_time_to_hours)
+            # 3. 태그 검증 (새로운 기능)
+            tag_issues = self.validate_tags(df, first_tags, second_tags)
             
-            # 이름 그룹 생성
-            print("👥 이름 그룹핑 중...")
-            df['Name_Group'] = df['Tasklist'].apply(get_name_group)
+            # 두 검증 결과 합치기
+            all_issues = validation_issues + tag_issues
             
-            # 그룹별 시간 합계 계산
-            group_totals = df.groupby('Name_Group')['Time_Hours'].sum()
-            
-            print(f"📊 검증 기준: 정확히 {min_hours}시간")
-            print("📋 개인별 시간 합계:")
-            
-            # 각 그룹별 검증
-            for name_group, total_hours in group_totals.items():
-                # 소수점 첫째자리까지 반올림
-                total_hours = round(total_hours, 1)
-                
-                print(f"  - {name_group}: {total_hours}시간")
-                
-                # 정확히 기준값과 일치하지 않는 경우만 오류로 판단
-                if total_hours != min_hours:
-                    issue_msg = f"{name_group}님 합산 오류 (현재: {total_hours}시간, 기준: {min_hours}시간)"
-                    validation_issues.append(issue_msg)
-                    print(f"    ⚠️ {issue_msg}")
-                else:
-                    print(f"    ✅ 기준 충족 (정확히 {min_hours}시간)")
-            
-            # 그룹핑 세부 정보 출력 (디버깅용)
-            print("\n🔍 그룹핑 세부 정보:")
-            for name_group in group_totals.index:
-                group_items = df[df['Name_Group'] == name_group]['Tasklist'].unique()
-                if len(group_items) > 1:
-                    print(f"  - {name_group} 그룹: {list(group_items)}")
-            
-            if not validation_issues:
-                print("✅ 모든 검증 통과! (모든 그룹이 정확히 기준 시간과 일치)")
+            if not all_issues:
+                print("✅ 모든 검증 통과! (시간 합계 + 태그 모두 정상)")
             else:
-                print(f"❌ {len(validation_issues)}개의 검증 이슈 발견")
+                print(f"❌ 총 {len(all_issues)}개의 검증 이슈 발견")
                 
-            return validation_issues
+            return all_issues
             
         except Exception as e:
             error_msg = f"검증 중 오류 발생: {str(e)}"
             print(f"❌ {error_msg}")
             return [error_msg]
+    
+    def _validate_time_totals(self, df, min_hours):
+        """시간 합계 검증 (기존 로직을 별도 메서드로 분리)"""
+        validation_issues = []
+        
+        # 시간 포맷 변환 함수
+        def convert_time_to_hours(time_str):
+            """시간 문자열 (HH:MM:SS)을 시간 단위로 변환"""
+            try:
+                if pd.isna(time_str) or time_str == '' or time_str == 0:
+                    return 0.0
+                
+                time_str = str(time_str).strip()
+                
+                if ':' in time_str:
+                    parts = time_str.split(':')
+                    if len(parts) == 3:
+                        hours = int(parts[0])
+                        minutes = int(parts[1])
+                        seconds = int(parts[2])
+                        total_hours = hours + (minutes / 60.0) + (seconds / 3600.0)
+                        return round(total_hours, 1)
+                    elif len(parts) == 2:
+                        minutes = int(parts[0])
+                        seconds = int(parts[1])
+                        total_hours = (minutes / 60.0) + (seconds / 3600.0)
+                        return round(total_hours, 1)
+                
+                return round(float(time_str), 1)
+                
+            except (ValueError, IndexError, TypeError):
+                print(f"⚠️ 시간 변환 실패: '{time_str}' - 0으로 처리")
+                return 0.0
+        
+        # 이름 그룹핑 함수
+        def get_name_group(tasklist_name):
+            """이름 앞 3글자로 그룹핑"""
+            if pd.isna(tasklist_name) or tasklist_name == '':
+                return '미분류'
+            
+            name_str = str(tasklist_name).strip()
+            if len(name_str) >= 3:
+                return name_str[:3]
+            else:
+                return name_str
+        
+        # 시간 데이터 변환
+        print("⏱️ 시간 데이터 변환 중...")
+        df['Time_Hours'] = df['Time_Spent'].apply(convert_time_to_hours)
+        
+        # 이름 그룹 생성
+        print("👥 이름 그룹핑 중...")
+        df['Name_Group'] = df['Tasklist'].apply(get_name_group)
+        
+        # 그룹별 시간 합계 계산
+        group_totals = df.groupby('Name_Group')['Time_Hours'].sum()
+        
+        print(f"📊 검증 기준: 정확히 {min_hours}시간")
+        print("📋 개인별 시간 합계:")
+        
+        # 각 그룹별 검증
+        for name_group, total_hours in group_totals.items():
+            total_hours = round(total_hours, 1)
+            print(f"  - {name_group}: {total_hours}시간")
+            
+            if total_hours != min_hours:
+                issue_msg = f"{name_group}님 합산 오류 (현재: {total_hours}시간, 기준: {min_hours}시간)"
+                validation_issues.append(issue_msg)
+                print(f"    ⚠️ {issue_msg}")
+            else:
+                print(f"    ✅ 기준 충족 (정확히 {min_hours}시간)")
+        
+        # 그룹핑 세부 정보 출력
+        print("\n🔍 그룹핑 세부 정보:")
+        for name_group in group_totals.index:
+            group_items = df[df['Name_Group'] == name_group]['Tasklist'].unique()
+            if len(group_items) > 1:
+                print(f"  - {name_group} 그룹: {list(group_items)}")
+        
+        return validation_issues
     
     def process_csv(self, input_file, columns=['Tasklist', 'Task', 'Tags', 'Time Spent']):
         """
