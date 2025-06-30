@@ -542,66 +542,49 @@ class TaskworldSeleniumDownloader:
         return validation_issues
     
     def process_csv(self, input_file, columns=['Tasklist', 'Task', 'Tags', 'Time Spent']):
-        """
-        CSV 파일 처리 (기존 CSV_4export.py 로직)
-        특정 열만 추출하고 Tasklist열의 특정 값들을 가진 행을 제거
-        """
+        """CSV 파일 처리 - 검증용 열 제외하고 최종 파일 저장"""
         try:
             print("📊 CSV 파일 처리 시작...")
             
-            # CSV 파일 읽기
+            # CSV 읽기
             df = pd.read_csv(input_file)
             original_count = len(df)
             
-            print(f"📊 원본 데이터: {original_count}행")
-            print(f"📋 발견된 열 이름들: {list(df.columns)}")
-            
-            # Tasklist열(B열)의 특정 값들을 가진 행 제거 (파일에서 로드)
+            # 제외값 필터링
             exclude_values = self.load_exclude_values()
-            
-            # Tasklist열이 존재하는지 확인
-            removed_count = 0
             if 'Tasklist' in df.columns:
                 df_filtered = df[~df['Tasklist'].isin(exclude_values)]
                 removed_count = original_count - len(df_filtered)
-                print(f"🚫 Tasklist열 필터링: {removed_count}행 제거됨 (제외값: {exclude_values})")
+                print(f"🚫 필터링: {removed_count}행 제거")
             else:
-                print("⚠️ Tasklist열이 존재하지 않아 필터링을 건너뜁니다.")
                 df_filtered = df
+                removed_count = 0
             
-            # 지정된 열 확인
+            # 열 선택
             missing_columns = [col for col in columns if col not in df_filtered.columns]
             if missing_columns:
-                error_msg = f"다음 열들을 찾을 수 없습니다: {missing_columns}"
-                print(f"❌ {error_msg}")
-                return None, None, error_msg, []
+                return None, None, f"열을 찾을 수 없음: {missing_columns}", []
             
-            # 지정된 열만 선택 (B, C, K, N 순서로)
             selected_df = df_filtered[columns]
-
-            # ⭐ 검증 단계 추가 ⭐
-            validation_issues = self.validate_csv_data(selected_df, min_hours=MIN_REQUIRED_HOURS)
             
-            # 새로운 CSV 파일명 생성 (설정 변수 사용)
+            # 검증 (이 과정에서 E열, F열이 추가될 수 있음)
+            validation_issues = self.validate_csv_data(selected_df.copy(), min_hours=MIN_REQUIRED_HOURS)
+            
+            # ⭐ 최종 파일 저장 시에는 원본 4개 열만 저장 ⭐
+            final_df = selected_df[['Tasklist', 'Task', 'Tags', 'Time Spent']]  # E열, F열 제외
+            
+            # 파일 저장
             output_file = OUTPUT_FILENAME
-            
-            # 기존 파일이 있으면 삭제 (덮어쓰기)
             if os.path.exists(output_file):
                 os.remove(output_file)
-                print(f"🗑️ 기존 파일 삭제: {output_file}")
             
-            # 새로운 CSV 파일로 저장 (헤더 제외)
-            selected_df.to_csv(output_file, index=False, header=False, encoding='utf-8-sig')
+            final_df.to_csv(output_file, index=False, header=False, encoding='utf-8-sig')
+            print(f"✅ CSV 처리 완료: {len(final_df)}행 → {output_file} (검증용 열 제외)")
             
-            print(f"✅ CSV 처리 완료: {len(selected_df)}행 저장 → {output_file}")
-            
-            # ⭐ 반환값 수정 (validation_issues 추가) ⭐
             return selected_df, removed_count, output_file, validation_issues
             
         except Exception as e:
-            error_msg = f"CSV 처리 중 오류: {str(e)}"
-            print(f"❌ {error_msg}")
-            return None, None, error_msg, []  # ⭐ 빈 리스트 추가 ⭐
+            return None, None, f"CSV 처리 오류: {str(e)}", []
 
 
     def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None):
