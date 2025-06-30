@@ -2,11 +2,8 @@ name: generate-report
 
 on:
   schedule:
-    # 평일 한국시간 오전 7시 (UTC 22시, 전날)
-    #- cron: '0 22 * * 0-4'  # 일요일-목요일 UTC 22시 = 월요일-금요일 KST 7시
-    #- cron: '* * * * *'  # 매분 실행 (테스트용)
-    # 테스트용: 한국시간 오후 5시 40분 (UTC 08:40)
-    - cron: '40 8 * * 1-5'  # 월-금 UTC 08:40 = 월-금 KST 17:40
+    # 테스트용: 한국시간 오후 5시 50분 (UTC 08:50)
+    - cron: '50 8 * * 1-5'  # 월-금 UTC 08:50 = 월-금 KST 17:50
   
   # 수동 실행도 가능하게
   workflow_dispatch:
@@ -44,7 +41,7 @@ jobs:
         
     - name: Upload logs (if failed)
       if: failure()
-      uses: actions/upload-artifact@v4  # v3 → v4로 업데이트
+      uses: actions/upload-artifact@v4
       with:
         name: error-logs
         path: |
