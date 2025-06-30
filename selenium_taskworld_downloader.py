@@ -279,6 +279,56 @@ class TaskworldSeleniumDownloader:
             print(f"❌ 워크스페이스 접속 실패: {e}")
             print(f"📄 현재 URL: {self.driver.current_url}")
             return False
+
+    def validate_csv_data(self, df, min_hours=160):
+        """
+        CSV 데이터 검증 - A열(Tasklist) 기준으로 D열(Time Spent) 합계 확인
+        """
+        validation_issues = []
+        
+        try:
+            print("🔍 CSV 데이터 검증 시작...")
+            
+            if len(df.columns) < 4:
+                validation_issues.append("❌ 열 수가 부족합니다. 최소 4개 열이 필요합니다.")
+                return validation_issues
+            
+            # 열 이름 설정 (헤더가 없으므로 인덱스 사용)
+            df.columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
+            
+            # Time_Spent 열을 숫자로 변환
+            df['Time_Spent_Numeric'] = pd.to_numeric(df['Time_Spent'], errors='coerce').fillna(0)
+            
+            # A열(Tasklist) 기준으로 그룹화하여 D열(Time_Spent) 합계 계산
+            group_totals = df.groupby('Tasklist')['Time_Spent_Numeric'].sum()
+            
+            print(f"📊 검증 기준: 최소 {min_hours}시간")
+            print("📋 개인별 시간 합계:")
+            
+            # 각 그룹별 검증
+            for tasklist_name, total_hours in group_totals.items():
+                print(f"  - {tasklist_name}: {total_hours}시간")
+                
+                if total_hours < min_hours:
+                    issue_msg = f"{tasklist_name}님 합산 오류 (현재: {total_hours}시간, 기준: {min_hours}시간)"
+                    validation_issues.append(issue_msg)
+                    print(f"    ⚠️ {issue_msg}")
+                else:
+                    print(f"    ✅ 기준 충족")
+            
+            if not validation_issues:
+                print("✅ 모든 검증 통과!")
+            else:
+                print(f"❌ {len(validation_issues)}개의 검증 이슈 발견")
+                
+            return validation_issues
+        
+    except Exception as e:
+        error_msg = f"검증 중 오류 발생: {str(e)}"
+        print(f"❌ {error_msg}")
+        return [error_msg]
+
+
     
     def process_csv(self, input_file, columns=['Tasklist', 'Task', 'Tags', 'Time Spent']):
         """
@@ -343,7 +393,7 @@ class TaskworldSeleniumDownloader:
             return None, None, error_msg, []  # ⭐ 빈 리스트 추가 ⭐
 
 
-    def send_to_slack(self, csv_file_path, stats=None, error_message=None):
+    def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None):
         """
         슬랙에 리포트 전송 (파일 업로드 + 메시지) - 파일명 표시 및 쓰레드 오류 지원
         """
@@ -384,7 +434,15 @@ class TaskworldSeleniumDownloader:
                 message_text += f"\n❌ 파일 업로드 실패: `{error_message}`"
             else:
                 message_text += f"\n✅ 파일 업로드 성공: `{OUTPUT_FILENAME}`"
-            
+
+                # ⭐ 검증 결과 추가 (오류가 있을 때만) ⭐
+                if validation_issues:
+                    message_text += f"\n\n```"
+                    message_text += f"\n[검증 오류]"
+                    for issue in validation_issues:
+                        message_text += f"\n- {issue}"
+                    message_text += f"\n```"
+                    
             msg_response = self.slack_client.chat_postMessage(
                 channel=actual_channel_id,
                 text=message_text
@@ -816,20 +874,27 @@ class TaskworldSeleniumDownloader:
                 return None
             
             print(f"\n✅ 태스크월드 CSV 다운로드 완료: {csv_file}")
-            
-            # 5. CSV 처리
-            print("\n5️⃣ CSV 파일 처리...")
-            result_df, removed_count, processed_file = self.process_csv(csv_file)
+
+            # 5. CSV 처리 + 검증
+            print("\n5️⃣ CSV 파일 처리 및 검증...")
+            result_df, removed_count, processed_file, validation_issues = self.process_csv(csv_file)
             
             if result_df is None:
-                error_msg = processed_file  # process_csv에서 에러 메시지 반환
+                error_msg = processed_file
                 self.send_to_slack(None, None, error_msg)
                 return None
             
             print(f"✅ CSV 처리 완료: {processed_file}")
-            print(f"📊 통계 - 총: {len(result_df) + (removed_count or 0)}, 필터링: {removed_count or 0}, 최종: {len(result_df)}")
             
-            # 6. 슬랙 전송 (강화된 디버깅)
+            # 검증 결과 표시
+            if validation_issues:
+                print(f"⚠️ 검증 이슈 {len(validation_issues)}개 발견:")
+                for issue in validation_issues:
+                    print(f"  - {issue}")
+            else:
+                print("✅ 모든 데이터 검증 통과")
+            
+            # 6. 슬랙 전송 (검증 결과 포함)
             print("\n6️⃣ 슬랙 리포트 전송...")
             if self.slack_client:
                 # 통계 정보 구성
@@ -838,7 +903,7 @@ class TaskworldSeleniumDownloader:
                 print(f"📊 전송할 통계: {stats_info}")
                 print(f"📁 전송할 파일: {processed_file}")
                 
-                success = self.send_to_slack(processed_file, stats_info, None)
+                success = self.send_to_slack(processed_file, stats_info, None, validation_issues)
                 if success:
                     print("✅ 슬랙 전송 완료! (파일+메시지 모두 성공)")
                 else:
