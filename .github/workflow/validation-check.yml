@@ -1,0 +1,43 @@
+name: validation-check
+
+on:
+  schedule:
+    # 한국시간 평일 오후 4시 50분 (UTC 07:50)
+    - cron: '50 7 * * 1-5'  # 월-금 UTC 07:50 = 월-금 KST 16:50
+    # 한국시간 평일 오후 6시 50분 (UTC 09:50)  
+    - cron: '50 9 * * 1-5'  # 월-금 UTC 09:50 = 월-금 KST 18:50
+  
+  # 수동 실행도 가능하게
+  workflow_dispatch:
+
+jobs:
+  validation-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        pip install pandas python-dotenv slack-sdk
+        
+    - name: Run validation check
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        SLACK_CHANNEL_VALIDATION: ${{ secrets.SLACK_CHANNEL_VALIDATION }}
+      run: |
+        python selenium_taskworld_downloader.py validation
+        
+    - name: Upload logs (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: validation-error-logs
+        path: |
+          *.log
