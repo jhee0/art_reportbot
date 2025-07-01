@@ -594,9 +594,11 @@ class TaskworldSeleniumDownloader:
             
             # 파일 존재 확인
             if not os.path.exists(file_path):
-                error_msg = f"검증할 파일이 없습니다: {file_path}"
-                print(f"❌ {error_msg}")
-                return [error_msg]
+                # ⭐ 검증 전용 모드에서는 파일 없음을 정보성 메시지로 처리 ⭐
+                info_msg = f"검증할 파일이 없습니다: {file_path}"
+                print(f"ℹ️ {info_msg}")
+                print("💡 전체 프로세스를 실행하면 파일이 생성됩니다.")
+                return [info_msg]
             
             # CSV 파일 읽기 (헤더 없이 읽기)
             df = pd.read_csv(file_path, header=None, encoding='utf-8-sig')
@@ -633,9 +635,17 @@ class TaskworldSeleniumDownloader:
             validation_channel = os.getenv(channel_env_var, "#아트실")
             print(f"📨 검증 리포트 전송 채널: {validation_channel}")
             
+            # ⭐ 파일 없음 메시지 체크 ⭐
+            file_not_exists = any("검증할 파일이 없습니다" in issue for issue in validation_issues)
+            
             if not validation_issues:
                 # 검증 성공 메시지 (간단하게)
                 message_text = "[태스크월드 검토] 오류 없음 👍"
+            elif file_not_exists:
+                # ⭐ 파일이 없는 경우 정보성 메시지로 처리 ⭐
+                message_text = f"[태스크월드 검토] 검증 파일 없음 📋\n"
+                message_text += f"💡 전체 프로세스를 실행하면 파일이 생성됩니다.\n"
+                message_text += f"📁 예상 파일: `{OUTPUT_FILENAME}`"
             else:
                 # 검증 실패 시 오류 인원 추출
                 mentioned_people = self._extract_people_from_issues(validation_issues)
@@ -648,7 +658,7 @@ class TaskworldSeleniumDownloader:
                     people_list = ", ".join(mentioned_people)
                     message_text += f"🧨 확인 필요한 사람 : {people_list}\n"
                 
-                # 상세 오류 목록
+                # 상세 오류 목록ㄴ
                 message_text += f"```[오류 내용 확인]"
                 for issue in validation_issues:
                     message_text += f"\n- {issue}"
@@ -1347,4 +1357,6 @@ if __name__ == "__main__":
             print(f"📁 최종 파일: {result}")
         else:
             print("\n❌ 완전 자동화 실패")
-            exit(1)
+            exit(1) 클릭
+            try:
+                print("🎯 ActionChains
