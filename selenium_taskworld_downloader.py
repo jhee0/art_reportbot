@@ -602,7 +602,6 @@ class TaskworldSeleniumDownloader:
             if not validation_issues:
                 # 검증 성공 메시지
                 message_text = "[태스크월드 검토] 오류 없음 👍\n"
-                message_text += f"✅ 최신 데이터로 검증 완료"
             else:
                 # 검증 실패 시 오류 인원 추출
                 mentioned_people = self._extract_people_from_issues(validation_issues)
