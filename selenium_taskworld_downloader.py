@@ -1,4 +1,4 @@
-# selenium_taskworld_downloader.py - 완전 자동화 스크립트 (설정값 개선)
+# selenium_taskworld_downloader.py - 완전 자동화 스크립트 (설정값 개선 + 검증 전용 기능 추가)
 import os
 import time
 import glob
@@ -586,6 +586,149 @@ class TaskworldSeleniumDownloader:
         except Exception as e:
             return None, None, f"CSV 처리 오류: {str(e)}", []
 
+    # ⭐ 새로 추가된 검증 전용 함수들 ⭐
+    def validate_existing_file(self, file_path=OUTPUT_FILENAME):
+        """기존 파일을 읽어서 검증만 수행"""
+        try:
+            print(f"🔍 기존 파일 검증 시작: {file_path}")
+            
+            # 파일 존재 확인
+            if not os.path.exists(file_path):
+                error_msg = f"검증할 파일이 없습니다: {file_path}"
+                print(f"❌ {error_msg}")
+                return [error_msg]
+            
+            # CSV 파일 읽기 (헤더 없이 읽기)
+            df = pd.read_csv(file_path, header=None, encoding='utf-8-sig')
+            print(f"📊 파일 로드 완료: {len(df)}행")
+            
+            # 열 이름 설정 (기존과 동일)
+            df.columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
+            
+            # 검증 수행
+            validation_issues = self.validate_csv_data(df.copy(), min_hours=MIN_REQUIRED_HOURS)
+            
+            if not validation_issues:
+                print("✅ 검증 완료: 모든 데이터 정상!")
+            else:
+                print(f"❌ 검증 완료: {len(validation_issues)}개 이슈 발견")
+                for issue in validation_issues:
+                    print(f"  - {issue}")
+            
+            return validation_issues
+            
+        except Exception as e:
+            error_msg = f"파일 검증 중 오류: {str(e)}"
+            print(f"❌ {error_msg}")
+            return [error_msg]
+
+    def send_validation_report_to_slack(self, validation_issues, channel_env_var="SLACK_CHANNEL_VALIDATION"):
+        """검증 결과만 슬랙에 전송 (파일 업로드 없이) - 오류 발견시 해당 인원 표시"""
+        if not self.slack_client:
+            print("⚠️ 슬랙 클라이언트 없음")
+            return False
+        
+        try:
+            # 검증 전용 채널 가져오기
+            validation_channel = os.getenv(channel_env_var, "#아트실")
+            print(f"📨 검증 리포트 전송 채널: {validation_channel}")
+            
+            if not validation_issues:
+                # 검증 성공 메시지 (간단하게)
+                message_text = "[태스크월드 검토] 오류 없음 👍"
+            else:
+                # 검증 실패 시 오류 인원 추출
+                mentioned_people = self._extract_people_from_issues(validation_issues)
+                
+                # 메시지 시작
+                message_text = "[태스크월드 검토] 오류 발견 ☠️\n"
+                
+                # 확인 필요한 사람들 표시
+                if mentioned_people:
+                    people_list = ", ".join(mentioned_people)
+                    message_text += f"🧨 확인 필요한 사람 : {people_list}\n"
+                
+                # 상세 오류 목록
+                message_text += f"```[오류 내용 확인]"
+                for issue in validation_issues:
+                    message_text += f"\n- {issue}"
+                message_text += f"```"
+            
+            # 메시지 전송
+            msg_response = self.slack_client.chat_postMessage(
+                channel=validation_channel,
+                text=message_text
+            )
+            
+            if msg_response.get('ok'):
+                print("✅ 검증 리포트 전송 완료")
+                return True
+            else:
+                print(f"❌ 메시지 전송 실패: {msg_response.get('error')}")
+                return False
+        
+        except Exception as e:
+            print(f"❌ 슬랙 전송 오류: {e}")
+            return False
+
+    def _extract_people_from_issues(self, validation_issues):
+        """검증 오류에서 사람 이름 추출"""
+        people = set()
+        try:
+            for issue in validation_issues:
+                # "배진희님 태그 오류", "배진희님 합산 오류" 등에서 이름 추출
+                if "님" in issue:
+                    # "님" 앞의 단어를 찾기
+                    parts = issue.split("님")
+                    if len(parts) > 0:
+                        # 첫 번째 부분에서 마지막 단어 (이름) 추출
+                        name_part = parts[0].strip()
+                        # 공백으로 분리해서 마지막 단어가 이름
+                        words = name_part.split()
+                        if words:
+                            name = words[-1]  # 마지막 단어가 이름
+                            # 한글 이름인지 확인 (한글 2글자 이상)
+                            if len(name) >= 2 and all('\uac00' <= char <= '\ud7a3' for char in name):
+                                people.add(name)
+            
+            print(f"🔍 검증 오류에서 추출된 인원: {list(people)}")
+            return list(people)
+            
+        except Exception as e:
+            print(f"⚠️ 인원 추출 중 오류: {e}")
+            return []
+
+    def run_validation_only(self, channel_env_var="SLACK_CHANNEL_VALIDATION"):
+        """검증 전용 실행 (파일 다운로드 없이 기존 파일만 검증)"""
+        try:
+            print("🔍 검증 전용 프로세스 시작")
+            print(f"📂 대상 파일: {OUTPUT_FILENAME}")
+            print(f"⏱️ 검증 기준: {MIN_REQUIRED_HOURS}시간")
+            
+            # 1. 기존 파일 검증
+            validation_issues = self.validate_existing_file()
+            
+            # 2. 검증 결과 슬랙 전송
+            success = self.send_validation_report_to_slack(validation_issues, channel_env_var)
+            
+            if success:
+                print("🎉 검증 전용 프로세스 완료!")
+            else:
+                print("❌ 검증 전용 프로세스 실패")
+            
+            return success
+            
+        except Exception as e:
+            error_msg = f"검증 전용 프로세스 실패: {str(e)}"
+            print(f"❌ {error_msg}")
+            
+            # 오류도 슬랙에 전송
+            try:
+                self.send_validation_report_to_slack([error_msg], channel_env_var)
+            except:
+                pass
+            
+            return False
 
     def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None):
         """
@@ -1154,141 +1297,54 @@ class TaskworldSeleniumDownloader:
             if self.driver:
                 self.driver.quit()
                 print("🔚 브라우저 종료")
-    
-    # 기존 메서드들도 유지 (호환성을 위해)
-    def download_taskworld_csv(self, email, password, workspace_name=WORKSPACE_NAME):
-        """기존 호환성을 위한 메서드 (내부적으로 완전 자동화 실행)"""
-        return self.run_complete_automation(email, password, workspace_name)
 
-# 디버깅용 함수
-def debug_file_system():
-    """현재 디렉토리 상태 출력"""
-    current_dir = os.getcwd()
-    print(f"📁 현재 작업 디렉토리: {current_dir}")
-    
-    # 모든 파일 목록
-    all_files = os.listdir('.')
-    print(f"📋 전체 파일 목록: {all_files}")
-    
-    # CSV 파일만 찾기
-    csv_files = glob.glob("*.csv")
-    print(f"📊 CSV 파일들: {csv_files}")
-    
-    if csv_files:
-        for csv_file in csv_files:
-            file_size = os.path.getsize(csv_file)
-            mod_time = datetime.fromtimestamp(os.path.getmtime(csv_file))
-            print(f"  - {csv_file}: {file_size}바이트, 수정시간: {mod_time}")
 
-def check_required_files():
-    """필수 설정 파일들 확인 및 생성"""
-    print("🔍 필수 설정 파일 확인...")
-    
-    required_files = {
-        FIRST_TAGS_FILE: [
-            "# 첫 번째 태그 목록 (부분 일치로 검증)",
-            "# 한 줄에 하나씩 입력",
-            "기획",
-            "개발",
-            "디자인",
-            "QA"
-        ],
-        SECOND_TAGS_FILE: [
-            "# 두 번째 태그 목록 (완전 일치로 검증)",
-            "# 한 줄에 하나씩 입력",
-            "완료",
-            "진행중",
-            "검토중",
-            "보류"
-        ],
-        EXCLUDE_VALUES_FILE: [
-            "# 제외할 Tasklist 값들 (한 줄에 하나씩)",
-            "# 주석은 #으로 시작",
-            "",
-            "주요일정",
-            "아트실",
-            "UI팀",
-            "리소스팀",
-            "디자인팀",
-            "TA팀"
-        ]
-    }
-    
-    for filename, default_content in required_files.items():
-        if not os.path.exists(filename):
-            print(f"❌ {filename} 파일이 없습니다. 기본 파일을 생성합니다...")
-            try:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    for line in default_content:
-                        f.write(line + '\n')
-                print(f"✅ {filename} 기본 파일 생성 완료")
-            except Exception as e:
-                print(f"❌ {filename} 파일 생성 실패: {e}")
-        else:
-            print(f"✅ {filename} 파일 존재함")
-
-# 사용 예제
+# ⭐ 수정된 메인 실행 부분 ⭐
 if __name__ == "__main__":
-    # 먼저 파일 시스템 상태 확인
+    import sys
+    
     print("🔍 환경변수 확인:")
     print(f"📧 TASKWORLD_EMAIL: {'설정됨' if os.getenv('TASKWORLD_EMAIL') else '❌ 없음'}")
     print(f"🔒 TASKWORLD_PASSWORD: {'설정됨' if os.getenv('TASKWORLD_PASSWORD') else '❌ 없음'}")
     print(f"🤖 SLACK_BOT_TOKEN: {'설정됨' if os.getenv('SLACK_BOT_TOKEN') else '❌ 없음'}")
     print(f"💬 SLACK_CHANNEL: {os.getenv('SLACK_CHANNEL', '❌ 없음')}")
+    print(f"💬 SLACK_CHANNEL_VALIDATION: {os.getenv('SLACK_CHANNEL_VALIDATION', '❌ 없음')}")
     
-    print("\n🔍 설정값 확인:")
+    print(f"\n🔍 설정값 확인:")
     print(f"📂 워크스페이스: {WORKSPACE_NAME}")
     print(f"📄 출력 파일명: {OUTPUT_FILENAME}")
     print(f"⏱️ 최소 필수 시간: {MIN_REQUIRED_HOURS}시간")
-    print(f"🗂️ 첫 번째 태그 파일: {FIRST_TAGS_FILE}")
-    print(f"🗂️ 두 번째 태그 파일: {SECOND_TAGS_FILE}")
-    print(f"🗂️ 제외값 파일: {EXCLUDE_VALUES_FILE}")
     
-    print("\n🔍 현재 파일 시스템 상태:")
-    debug_file_system()
+    # 실행 모드 확인
+    mode = sys.argv[1] if len(sys.argv) > 1 else "full"
     
-    print("\n🔍 필수 설정 파일 확인:")
-    check_required_files()
-    
-    print("=" * 60)
-    
-    # 환경변수에서 로그인 정보 읽기
-    email = os.getenv("TASKWORLD_EMAIL")
-    password = os.getenv("TASKWORLD_PASSWORD")
-    workspace = os.getenv("TASKWORLD_WORKSPACE", WORKSPACE_NAME)  # 설정 변수 사용
-    
-    # 환경변수가 없으면 테스트 모드
-    if not email or not password:
-        print("❌ TASKWORLD_EMAIL, TASKWORLD_PASSWORD 환경변수가 필요합니다.")
-        print("🧪 테스트 모드: 브라우저만 열어서 확인")
+    if mode == "validation":
+        # 검증 전용 모드
+        print("🔍 검증 전용 모드로 실행")
+        downloader = TaskworldSeleniumDownloader(headless=True)
+        result = downloader.run_validation_only()
         
-        # 환경변수 없이도 브라우저 열어서 확인 가능
-        test_email = input("테스트용 이메일 입력 (또는 Enter로 건너뛰기): ").strip()
-        test_password = input("테스트용 패스워드 입력 (또는 Enter로 건너뛰기): ").strip()
-        
-        if test_email and test_password:
-            email, password = test_email, test_password
-        else:
-            print("⏭️ 로그인 정보 없이 파일 시스템만 확인")
-            exit(0)
-    
-    # 완전 자동화 실행
-    downloader = TaskworldSeleniumDownloader(headless=DEFAULT_HEADLESS)
-    result_file = downloader.run_complete_automation(email, password, workspace)
-    
-    if result_file:
-        print(f"\n🎉 완전 자동화 성공!")
-        print(f"📁 최종 파일: {result_file}")
-        
-        # 최종 상태 확인
-        print("\n🔍 완료 후 파일 시스템 상태:")
-        debug_file_system()
-        
-        print("\n✅ 모든 프로세스 완료!")
-        print("📊 다운로드 → 처리 → 슬랙 전송까지 모두 자동화됨")
-        print(f"⚙️ 설정: MIN_REQUIRED_HOURS={MIN_REQUIRED_HOURS}, OUTPUT_FILENAME={OUTPUT_FILENAME}")
+        if not result:
+            exit(1)
     else:
-        print("\n❌ 완전 자동화 실패")
-        print("\n🔍 실패 후 파일 시스템 상태:")
-        debug_file_system()
-        exit(1)
+        # 기존 전체 프로세스 모드
+        print("🚀 전체 프로세스 모드로 실행")
+        
+        # 환경변수에서 로그인 정보 읽기
+        email = os.getenv("TASKWORLD_EMAIL")
+        password = os.getenv("TASKWORLD_PASSWORD")
+        workspace = os.getenv("TASKWORLD_WORKSPACE", WORKSPACE_NAME)
+        
+        if not email or not password:
+            print("❌ 환경변수 필요: TASKWORLD_EMAIL, TASKWORLD_PASSWORD")
+            exit(1)
+        
+        downloader = TaskworldSeleniumDownloader(headless=DEFAULT_HEADLESS)
+        result = downloader.run_complete_automation(email, password, workspace)
+        
+        if result:
+            print("\n🎉 완전 자동화 성공!")
+            print(f"📁 최종 파일: {result}")
+        else:
+            print("\n❌ 완전 자동화 실패")
+            exit(1)
