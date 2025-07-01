@@ -29,7 +29,10 @@ jobs:
         
     - name: Run validation check
       env:
+        TASKWORLD_EMAIL: ${{ secrets.TASKWORLD_EMAIL }}
+        TASKWORLD_PASSWORD: ${{ secrets.TASKWORLD_PASSWORD }}
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
         SLACK_CHANNEL_VALIDATION: ${{ secrets.SLACK_CHANNEL_VALIDATION }}
       run: |
         python selenium_taskworld_downloader.py validation
