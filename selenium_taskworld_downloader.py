@@ -586,43 +586,7 @@ class TaskworldSeleniumDownloader:
         except Exception as e:
             return None, None, f"CSV 처리 오류: {str(e)}", []
 
-    # ⭐ 새로 추가된 검증 전용 함수들 ⭐
-    def validate_existing_file(self, file_path=OUTPUT_FILENAME):
-        """기존 파일을 읽어서 검증만 수행"""
-        try:
-            print(f"🔍 기존 파일 검증 시작: {file_path}")
-            
-            # 파일 존재 확인
-            if not os.path.exists(file_path):
-                # ⭐ 검증 전용 모드에서는 파일 없음을 정보성 메시지로 처리 ⭐
-                info_msg = f"검증할 파일이 없습니다: {file_path}"
-                print(f"ℹ️ {info_msg}")
-                print("💡 전체 프로세스를 실행하면 파일이 생성됩니다.")
-                return [info_msg]
-            
-            # CSV 파일 읽기 (헤더 없이 읽기)
-            df = pd.read_csv(file_path, header=None, encoding='utf-8-sig')
-            print(f"📊 파일 로드 완료: {len(df)}행")
-            
-            # 열 이름 설정 (기존과 동일)
-            df.columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
-            
-            # 검증 수행
-            validation_issues = self.validate_csv_data(df.copy(), min_hours=MIN_REQUIRED_HOURS)
-            
-            if not validation_issues:
-                print("✅ 검증 완료: 모든 데이터 정상!")
-            else:
-                print(f"❌ 검증 완료: {len(validation_issues)}개 이슈 발견")
-                for issue in validation_issues:
-                    print(f"  - {issue}")
-            
-            return validation_issues
-            
-        except Exception as e:
-            error_msg = f"파일 검증 중 오류: {str(e)}"
-            print(f"❌ {error_msg}")
-            return [error_msg]
+    # ⭐ 검증 전용 함수들 ⭐
 
     def send_validation_report_to_slack(self, validation_issues, channel_env_var="SLACK_CHANNEL_VALIDATION"):
         """검증 결과만 슬랙에 전송 (파일 업로드 없이) - 오류 발견시 해당 인원 표시"""
@@ -635,17 +599,10 @@ class TaskworldSeleniumDownloader:
             validation_channel = os.getenv(channel_env_var, "#아트실")
             print(f"📨 검증 리포트 전송 채널: {validation_channel}")
             
-            # ⭐ 파일 없음 메시지 체크 ⭐
-            file_not_exists = any("검증할 파일이 없습니다" in issue for issue in validation_issues)
-            
             if not validation_issues:
-                # 검증 성공 메시지 (간단하게)
-                message_text = "[태스크월드 검토] 오류 없음 👍"
-            elif file_not_exists:
-                # ⭐ 파일이 없는 경우 정보성 메시지로 처리 ⭐
-                message_text = f"[태스크월드 검토] 검증 파일 없음 📋\n"
-                message_text += f"💡 전체 프로세스를 실행하면 파일이 생성됩니다.\n"
-                message_text += f"📁 예상 파일: `{OUTPUT_FILENAME}`"
+                # 검증 성공 메시지
+                message_text = "[태스크월드 검토] 오류 없음 👍\n"
+                message_text += f"✅ 최신 데이터로 검증 완료"
             else:
                 # 검증 실패 시 오류 인원 추출
                 mentioned_people = self._extract_people_from_issues(validation_issues)
@@ -709,24 +666,125 @@ class TaskworldSeleniumDownloader:
             return []
 
     def run_validation_only(self, channel_env_var="SLACK_CHANNEL_VALIDATION"):
-        """검증 전용 실행 (파일 다운로드 없이 기존 파일만 검증)"""
+        """검증 전용 실행 (최신 파일 다운로드 후 검증, 파일 업로드는 하지 않음)"""
         try:
-            print("🔍 검증 전용 프로세스 시작")
+            print("🔍 검증 전용 프로세스 시작 (최신 파일 다운로드)")
+            print("=" * 60)
             print(f"📂 대상 파일: {OUTPUT_FILENAME}")
             print(f"⏱️ 검증 기준: {MIN_REQUIRED_HOURS}시간")
+            print("💡 검증을 위해 최신 파일을 다운로드합니다...")
             
-            # 1. 기존 파일 검증
-            validation_issues = self.validate_existing_file()
+            # 환경변수에서 로그인 정보 읽기
+            email = os.getenv("TASKWORLD_EMAIL")
+            password = os.getenv("TASKWORLD_PASSWORD")
+            workspace = os.getenv("TASKWORLD_WORKSPACE", WORKSPACE_NAME)
             
-            # 2. 검증 결과 슬랙 전송
-            success = self.send_validation_report_to_slack(validation_issues, channel_env_var)
+            if not email or not password:
+                error_msg = "환경변수 필요: TASKWORLD_EMAIL, TASKWORLD_PASSWORD"
+                print(f"❌ {error_msg}")
+                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                return False
             
-            if success:
-                print("🎉 검증 전용 프로세스 완료!")
-            else:
-                print("❌ 검증 전용 프로세스 실패")
+            # 1. 드라이버 설정
+            print("1️⃣ 드라이버 설정...")
+            if not self.setup_driver():
+                error_msg = "브라우저 드라이버 설정 실패"
+                print(f"❌ {error_msg}")
+                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                return False
             
-            return success
+            try:
+                # 2. 로그인
+                print("\n2️⃣ 로그인...")
+                if not self.login_to_taskworld(email, password):
+                    error_msg = "태스크월드 로그인 실패"
+                    print(f"❌ {error_msg}")
+                    self.send_validation_report_to_slack([error_msg], channel_env_var)
+                    return False
+                
+                # 3. 워크스페이스 이동
+                print("\n3️⃣ 워크스페이스 이동...")
+                if not self.navigate_to_workspace(workspace):
+                    error_msg = f"워크스페이스 '{workspace}' 접속 실패"
+                    print(f"❌ {error_msg}")
+                    self.send_validation_report_to_slack([error_msg], channel_env_var)
+                    return False
+                
+                # 4. CSV 내보내기
+                print("\n4️⃣ CSV 내보내기...")
+                csv_file = self.export_csv()
+                
+                if not csv_file:
+                    error_msg = "CSV 다운로드 실패"
+                    print(f"❌ {error_msg}")
+                    self.send_validation_report_to_slack([error_msg], channel_env_var)
+                    return False
+                
+                print(f"\n✅ 최신 CSV 다운로드 완료: {csv_file}")
+
+                # 5. CSV 처리 및 검증 (파일 저장까지)
+                print("\n5️⃣ CSV 파일 처리 및 검증...")
+                result_df, removed_count, processed_file, validation_issues = self.process_csv(csv_file)
+                
+                if result_df is None:
+                    error_msg = processed_file  # 오류 메시지가 담겨있음
+                    print(f"❌ {error_msg}")
+                    self.send_validation_report_to_slack([error_msg], channel_env_var)
+                    return False
+                
+                print(f"✅ CSV 처리 완료: {processed_file}")
+                
+                # 검증 결과 표시
+                if validation_issues:
+                    print(f"⚠️ 검증 이슈 {len(validation_issues)}개 발견:")
+                    for issue in validation_issues:
+                        print(f"  - {issue}")
+                else:
+                    print("✅ 모든 데이터 검증 통과")
+                
+                # 6. 검증 결과만 슬랙에 전송 (파일 업로드 없이)
+                print("\n6️⃣ 검증 결과 슬랙 전송...")
+                success = self.send_validation_report_to_slack(validation_issues, channel_env_var)
+                
+                # 7. 파일 정리 (원본 다운로드 파일만 삭제, 처리된 파일은 보존)
+                print("\n7️⃣ 파일 정리...")
+                try:
+                    # 원본 다운로드 파일 삭제
+                    if os.path.exists(csv_file):
+                        os.remove(csv_file)
+                        print(f"🗑️ 원본 다운로드 파일 삭제: {os.path.basename(csv_file)}")
+                    
+                    # Downloads 폴더의 export-projects 관련 파일들도 정리
+                    downloads_pattern = os.path.expanduser("~/Downloads/export-projects*.csv")
+                    downloads_files = glob.glob(downloads_pattern)
+                    for file in downloads_files:
+                        try:
+                            os.remove(file)
+                            print(f"🗑️ Downloads 파일 삭제: {os.path.basename(file)}")
+                        except:
+                            pass
+                    
+                    print(f"📁 검증용 파일 생성 완료: {processed_file}")
+                    print(f"📂 파일 위치: {os.path.abspath(processed_file)}")
+                    if os.path.exists(processed_file):
+                        file_size = os.path.getsize(processed_file)
+                        print(f"📊 파일 정보: {file_size} 바이트")
+                    print("✅ 파일 정리 완료 - 검증된 파일 보존")
+                except Exception as e:
+                    print(f"⚠️ 파일 정리 실패: {e}")
+                
+                if success:
+                    print("🎉 검증 전용 프로세스 완료! (최신 데이터로 검증)")
+                    return True
+                else:
+                    print("❌ 슬랙 전송 실패")
+                    return False
+                    
+            finally:
+                # 브라우저 종료
+                if self.driver:
+                    self.driver.quit()
+                    print("🔚 브라우저 종료")
             
         except Exception as e:
             error_msg = f"검증 전용 프로세스 실패: {str(e)}"
