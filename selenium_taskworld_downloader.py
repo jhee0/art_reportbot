@@ -658,7 +658,7 @@ class TaskworldSeleniumDownloader:
                     people_list = ", ".join(mentioned_people)
                     message_text += f"🧨 확인 필요한 사람 : {people_list}\n"
                 
-                # 상세 오류 목록ㄴ
+                # 상세 오류 목록
                 message_text += f"```[오류 내용 확인]"
                 for issue in validation_issues:
                     message_text += f"\n- {issue}"
@@ -1357,6 +1357,4 @@ if __name__ == "__main__":
             print(f"📁 최종 파일: {result}")
         else:
             print("\n❌ 완전 자동화 실패")
-            exit(1) 클릭
-            try:
-                print("🎯 ActionChains
+            exit(1)
