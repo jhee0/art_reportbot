@@ -248,7 +248,7 @@ class TaskworldSeleniumDownloader:
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
             print(f"📄 현재 URL: {self.driver.current_url}")
             
-            time.sleep(3)  # 페이지 로딩 대기
+            time.sleep(5)  # 페이지 로딩 대기
             
             # 1단계: URL을 직접 수정해서 프로젝트 페이지로 이동
             print("🔗 URL을 직접 수정해서 프로젝트 페이지로 이동...")
@@ -259,7 +259,7 @@ class TaskworldSeleniumDownloader:
                 project_url = current_url.replace("#/home", "#/projects")
                 print(f"📄 이동할 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(3)  # 프로젝트 페이지 로딩 대기
+                time.sleep(7)  # 프로젝트 페이지 로딩 대기
                 print("✅ 프로젝트 페이지로 이동 완료")
             else:
                 print("⚠️ URL에 #/home이 없어서 직접 프로젝트 페이지 구성을 시도합니다...")
@@ -272,7 +272,12 @@ class TaskworldSeleniumDownloader:
                 
                 print(f"📄 구성된 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(3)
+                time.sleep(7)
+
+            # 🔧 추가: 페이지 새로고침으로 안정성 확보
+            print("🔄 페이지 새로고침으로 최신 상태 확보...")
+            self.driver.refresh()
+            time.sleep(5)
             
             # 2단계: 워크스페이스 찾기
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
