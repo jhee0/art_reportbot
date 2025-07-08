@@ -875,7 +875,7 @@ class TaskworldSeleniumDownloader:
             
             # Due Date 알림 추가 (코드 블록으로 표시)
             if due_date_alerts:
-                message_text += f"\n\n```[점검 필요]"
+                message_text += f"\n```[점검 필요]"
                 for alert in due_date_alerts:
                     message_text += f"\n- {alert}"
                 message_text += f"\n```"
@@ -1108,7 +1108,7 @@ class TaskworldSeleniumDownloader:
                 
                 # ⭐ Due Date 알림 추가 (코드 블록으로 표시) ⭐
                 if due_date_alerts:
-                    message_text += f"\n\n```[점검 필요]"
+                    message_text += f"\n```[점검 필요]"
                     for alert in due_date_alerts:
                         message_text += f"\n- {alert}"
                     message_text += f"\n```"
