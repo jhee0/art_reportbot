@@ -141,7 +141,7 @@ class TaskworldSeleniumDownloader:
             # 브라우저 확인용 대기
             if not self.headless:
                 print("⏳ 브라우저 창 확인을 위해 3초 대기...")
-                time.sleep(3)
+                time.sleep(8)
             
             return True
             
@@ -190,7 +190,7 @@ class TaskworldSeleniumDownloader:
             self.driver.get("https://asia-enterprise.taskworld.com/login")
             
             # 페이지 로딩 대기
-            time.sleep(3)
+            time.sleep(8)
             print(f"📄 현재 페이지 URL: {self.driver.current_url}")
             print(f"📄 페이지 제목: {self.driver.title}")
             
@@ -233,7 +233,7 @@ class TaskworldSeleniumDownloader:
             
             # 로그인 완료 대기
             print("⏳ 로그인 완료 대기 중...")
-            time.sleep(5)
+            time.sleep(10)
             
             print(f"📄 로그인 후 URL: {self.driver.current_url}")
             print("✅ 이메일 로그인 완료!")
@@ -250,7 +250,7 @@ class TaskworldSeleniumDownloader:
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
             print(f"📄 현재 URL: {self.driver.current_url}")
             
-            time.sleep(3)  # 페이지 로딩 대기
+            time.sleep(8)  # 페이지 로딩 대기
             
             # 1단계: URL을 직접 수정해서 프로젝트 페이지로 이동
             print("🔗 URL을 직접 수정해서 프로젝트 페이지로 이동...")
@@ -261,7 +261,7 @@ class TaskworldSeleniumDownloader:
                 project_url = current_url.replace("#/home", "#/projects")
                 print(f"📄 이동할 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(3)  # 프로젝트 페이지 로딩 대기
+                time.sleep(12)  # 프로젝트 페이지 로딩 대기
                 print("✅ 프로젝트 페이지로 이동 완료")
             else:
                 print("⚠️ URL에 #/home이 없어서 직접 프로젝트 페이지 구성을 시도합니다...")
@@ -274,7 +274,7 @@ class TaskworldSeleniumDownloader:
                 
                 print(f"📄 구성된 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(3)
+                time.sleep(12)
             
             # 2단계: 워크스페이스 찾기
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
@@ -315,7 +315,7 @@ class TaskworldSeleniumDownloader:
             
             # 워크스페이스 로딩 대기
             print("⏳ 워크스페이스 로딩 대기...")
-            time.sleep(5)
+            time.sleep(12)
             
             print(f"📄 워크스페이스 접속 후 URL: {self.driver.current_url}")
             print(f"✅ '{workspace_name}' 워크스페이스 접속 완료")
@@ -1286,7 +1286,7 @@ class TaskworldSeleniumDownloader:
             if existing_csvs:
                 print(f"📋 정리 후 남은 파일들: {[os.path.basename(f) for f in existing_csvs]}")
             
-            time.sleep(3)
+            time.sleep(8)
             
             # 1단계: URL을 직접 수정해서 설정 페이지로 이동
             print("⚙️ URL을 직접 수정해서 설정 페이지로 이동...")
@@ -1297,7 +1297,7 @@ class TaskworldSeleniumDownloader:
                 settings_url = current_url.replace("view=board", "view=settings&menu=general")
                 print(f"📄 설정 페이지 URL: {settings_url}")
                 self.driver.get(settings_url)
-                time.sleep(3)  # 설정 페이지 로딩 대기
+                time.sleep(8)  # 설정 페이지 로딩 대기
                 print("✅ 설정 페이지로 이동 완료")
             else:
                 print("⚠️ URL에 view=board가 없어서 직접 설정 페이지 구성을 시도합니다...")
@@ -1309,7 +1309,7 @@ class TaskworldSeleniumDownloader:
                 
                 print(f"📄 구성된 설정 URL: {settings_url}")
                 self.driver.get(settings_url)
-                time.sleep(3)
+                time.sleep(8)
             
             # 2단계: CSV 내보내기 버튼 찾기
             print("📥 CSV 내보내기 버튼 찾는 중...")
@@ -1423,7 +1423,7 @@ class TaskworldSeleniumDownloader:
             except Exception as e:
                 print(f"⚠️ ActionChains 클릭 실패: {str(e).split('Stacktrace:')[0].strip()}")
                 
-            time.sleep(3)
+            time.sleep(8)
             
             print("📥 CSV 다운로드 시작...")
             
@@ -1633,7 +1633,7 @@ class TaskworldSeleniumDownloader:
             # 브라우저 종료 (headless=False일 때는 5초 대기)
             if not self.headless:
                 print("\n⏳ 브라우저 확인을 위해 5초 후 종료...")
-                time.sleep(5)
+                time.sleep(10)
             
             if self.driver:
                 self.driver.quit()
