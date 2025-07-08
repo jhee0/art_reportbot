@@ -556,8 +556,6 @@ class TaskworldSeleniumDownloader:
                             parsed_date = datetime.strptime(date_str, fmt).date()
                             if debug_info and parsed_date == today:
                                 print(f"🎯 {debug_info} - 오늘 마감 발견! '{date_str}' -> {parsed_date} (형식: {fmt})")
-                            elif debug_info:
-                                print(f"✅ {debug_info} - 파싱 성공: '{date_str}' -> {parsed_date} (형식: {fmt})")
                             return parsed_date
                         except ValueError:
                             continue
@@ -573,14 +571,12 @@ class TaskworldSeleniumDownloader:
             exclude_values = self.load_exclude_values()
             print(f"🚫 제외 대상: {exclude_values}")
             
-            # 각 행별로 Due Date 체크 (강화된 디버깅)
+            # 각 행별로 Due Date 체크 (간소화된 로그)
             due_date_count = 0
             today_due_count = 0
             excluded_count = 0
             empty_due_date_count = 0
             completed_count = 0
-            
-            print(f"\n🔍 상세 Due Date 분석 시작 (총 {len(df)}행)...")
             
             for idx, row in df.iterrows():
                 person_name = row['Tasklist']
@@ -591,14 +587,11 @@ class TaskworldSeleniumDownloader:
                 # 제외 대상 건너뛰기 (팀명 등)
                 if person_name in exclude_values:
                     excluded_count += 1
-                    print(f"  행 {idx+1}: 제외 대상 - {person_name}")
                     continue
                 
                 # Completed 상태 제외 (Active만 알림)
                 if status == 'Completed':
                     completed_count += 1
-                    if idx < 10:  # 처음 10개만 로그 출력
-                        print(f"  행 {idx+1}: Completed 상태 제외 - {person_name}, Status: '{status}'")
                     continue
                 
                 # Due Date 파싱
@@ -607,15 +600,9 @@ class TaskworldSeleniumDownloader:
                 
                 if not due_date:
                     empty_due_date_count += 1
-                    if idx < 10:  # 처음 10개만 로그 출력
-                        print(f"  행 {idx+1}: Due Date 없음 - {person_name}, Due Date: '{due_date_str}'")
                     continue
                 
                 due_date_count += 1
-                
-                # 🎯 모든 Due Date와 오늘 날짜 비교 로그
-                if idx < 10:  # 처음 10개만 상세 로그
-                    print(f"  행 {idx+1}: {person_name}, Due Date: {due_date}, Status: '{status}', 오늘: {today}, 같음: {due_date == today}")
                 
                 # 오늘 마감인 Active 작업만 체크
                 if due_date == today:
@@ -623,14 +610,14 @@ class TaskworldSeleniumDownloader:
                     person_group = get_name_group(person_name)
                     task_display = str(task_name)[:30] + "..." if len(str(task_name)) > 30 else str(task_name)
                     
-                    print(f"🎯 오늘 마감 Active 작업 발견! 행 {idx+1}: {person_name} - {task_name} (Status: {status})")
+                    print(f"🎯 오늘 마감 Active 작업 발견! {person_name} - {task_name} (Status: {status})")
                     
                     if current_time < work_end_time:
                         # 아직 업무시간 내
-                        alert_msg = f"{person_group}님 - {task_display} (오늘 종료 예정)"
+                        alert_msg = f"{person_group}님 : {task_display} (오늘 종료 예정)"
                     else:
                         # 업무시간 지남
-                        alert_msg = f"{person_group}님 - {task_display} (업무종료시간 지남)"
+                        alert_msg = f"{person_group}님 : {task_display} (업무종료시간 지남)"
                     
                     due_date_alerts.append(alert_msg)
                     print(f"📅 마감일 알림 생성: {alert_msg}")
@@ -888,7 +875,7 @@ class TaskworldSeleniumDownloader:
             
             # Due Date 알림 추가 (코드 블록으로 표시)
             if due_date_alerts:
-                message_text += f"\n```[점검 필요]"
+                message_text += f"\n\n```[점검 필요]"
                 for alert in due_date_alerts:
                     message_text += f"\n- {alert}"
                 message_text += f"\n```"
@@ -1121,7 +1108,7 @@ class TaskworldSeleniumDownloader:
                 
                 # ⭐ Due Date 알림 추가 (코드 블록으로 표시) ⭐
                 if due_date_alerts:
-                    message_text += f"\n```[점검 필요]"
+                    message_text += f"\n\n```[점검 필요]"
                     for alert in due_date_alerts:
                         message_text += f"\n- {alert}"
                     message_text += f"\n```"
