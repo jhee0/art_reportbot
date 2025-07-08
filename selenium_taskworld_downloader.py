@@ -1,9 +1,9 @@
-# selenium_taskworld_downloader.py - 완전 자동화 스크립트 (설정값 개선 + 검증 전용 기능 추가)
+# selenium_taskworld_downloader.py - 완전 자동화 스크립트 (설정값 개선 + 검증 전용 기능 + Due Date 체크 추가)
 import os
 import time
 import glob
 import pandas as pd
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -27,6 +27,7 @@ OUTPUT_FILENAME = "25_7.csv"  # 🔄 한달마다 수정하세요! (예: 25_7.cs
 # 🔧 검증 설정 변수 (필요시 수정)
 # ==========================================
 MIN_REQUIRED_HOURS = 160  # 🔄 필요시 수정하세요! (개인별 최소 시간)
+WORK_END_TIME_HOUR = 18   # 🔄 업무 종료 시간 (24시간 형식, 기본: 18시)
 
 # ==========================================
 # 🗂️ 파일 경로 설정
@@ -69,6 +70,7 @@ class TaskworldSeleniumDownloader:
         print(f"📂 대상 워크스페이스: {WORKSPACE_NAME}")
         print(f"📄 출력 파일명: {OUTPUT_FILENAME}")
         print(f"⏱️ 최소 필수 시간: {MIN_REQUIRED_HOURS}시간")
+        print(f"🕕 업무 종료 시간: {WORK_END_TIME_HOUR}시")
         print(f"💬 슬랙 채널: '{self.slack_channel}' (따옴표 포함 확인)")
         print(f"🔧 채널명 길이: {len(self.slack_channel)} 글자")
         
@@ -139,7 +141,7 @@ class TaskworldSeleniumDownloader:
             # 브라우저 확인용 대기
             if not self.headless:
                 print("⏳ 브라우저 창 확인을 위해 3초 대기...")
-                time.sleep(8)
+                time.sleep(3)
             
             return True
             
@@ -188,7 +190,7 @@ class TaskworldSeleniumDownloader:
             self.driver.get("https://asia-enterprise.taskworld.com/login")
             
             # 페이지 로딩 대기
-            time.sleep(5)
+            time.sleep(3)
             print(f"📄 현재 페이지 URL: {self.driver.current_url}")
             print(f"📄 페이지 제목: {self.driver.title}")
             
@@ -248,7 +250,7 @@ class TaskworldSeleniumDownloader:
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
             print(f"📄 현재 URL: {self.driver.current_url}")
             
-            time.sleep(10)  # 페이지 로딩 대기
+            time.sleep(3)  # 페이지 로딩 대기
             
             # 1단계: URL을 직접 수정해서 프로젝트 페이지로 이동
             print("🔗 URL을 직접 수정해서 프로젝트 페이지로 이동...")
@@ -259,7 +261,7 @@ class TaskworldSeleniumDownloader:
                 project_url = current_url.replace("#/home", "#/projects")
                 print(f"📄 이동할 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(10)  # 프로젝트 페이지 로딩 대기
+                time.sleep(3)  # 프로젝트 페이지 로딩 대기
                 print("✅ 프로젝트 페이지로 이동 완료")
             else:
                 print("⚠️ URL에 #/home이 없어서 직접 프로젝트 페이지 구성을 시도합니다...")
@@ -272,12 +274,7 @@ class TaskworldSeleniumDownloader:
                 
                 print(f"📄 구성된 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(10)
-
-            # 🔧 추가: 페이지 새로고침으로 안정성 확보
-            print("🔄 페이지 새로고침으로 최신 상태 확보...")
-            self.driver.refresh()
-            time.sleep(10)
+                time.sleep(3)
             
             # 2단계: 워크스페이스 찾기
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
@@ -318,7 +315,7 @@ class TaskworldSeleniumDownloader:
             
             # 워크스페이스 로딩 대기
             print("⏳ 워크스페이스 로딩 대기...")
-            time.sleep(12)
+            time.sleep(5)
             
             print(f"📄 워크스페이스 접속 후 URL: {self.driver.current_url}")
             print(f"✅ '{workspace_name}' 워크스페이스 접속 완료")
@@ -494,43 +491,223 @@ class TaskworldSeleniumDownloader:
             print(f"❌ {error_msg}")
             return [error_msg]
     
+    def check_due_date_alerts(self, df, work_end_hour=WORK_END_TIME_HOUR):
+        """Due Date 기반 마감일 알림 체크 - 강화된 디버깅"""
+        due_date_alerts = []
+        
+        try:
+            print(f"📅 Due Date 알림 체크 시작 (업무종료시간: {work_end_hour}시)...")
+            
+            # Due Date 열이 존재하는지 확인
+            if 'Due Date' not in df.columns:
+                print("⚠️ Due Date 열이 존재하지 않음 - 마감일 체크 건너뜀")
+                print(f"📋 사용 가능한 컬럼: {list(df.columns)}")
+                return due_date_alerts
+            
+            # 현재 한국 시간
+            now = datetime.now(self.korea_tz)
+            today = now.date()
+            current_time = now.time()
+            work_end_time = datetime.strptime(f"{work_end_hour}:00", "%H:%M").time()
+            
+            print(f"📅 현재 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"📅 오늘 날짜: {today}")
+            print(f"🕐 업무 종료 시간: {work_end_time}")
+            
+            # 🔍 Due Date 컬럼의 모든 고유값 확인
+            unique_due_dates = df['Due Date'].unique()
+            print(f"🔍 Due Date 컬럼의 고유값들 (처음 10개): {unique_due_dates[:10]}")
+            print(f"🔍 Due Date 컬럼 데이터 타입들: {[type(x).__name__ for x in unique_due_dates[:5]]}")
+            
+            # 이름 그룹핑 함수
+            def get_name_group(tasklist_name):
+                if pd.isna(tasklist_name) or tasklist_name == '':
+                    return '미분류'
+                name_str = str(tasklist_name).strip()
+                return name_str[:3] if len(name_str) >= 3 else name_str
+            
+            # 날짜 파싱 함수 (강화된 디버깅)
+            def parse_due_date(due_date_str, debug_info=""):
+                if pd.isna(due_date_str) or due_date_str == '':
+                    return None
+                
+                try:
+                    # 다양한 날짜 형식 지원 (시간 포함 형식 추가)
+                    date_formats = [
+                        '%Y-%m-%d',                # 2025-07-08
+                        '%m/%d/%Y',               # 07/08/2025
+                        '%d/%m/%Y',               # 08/07/2025
+                        '%Y.%m.%d',               # 2025.07.08
+                        '%Y/%m/%d',               # 2025/07/08
+                        '%Y-%m-%d %H:%M:%S',      # 2025-07-08 00:00:00
+                        '%Y-%m-%dT%H:%M:%S',      # 2025-07-08T00:00:00
+                        '%m/%d/%Y %H:%M',         # 07/09/2025 18:00  ← 추가!
+                        '%m/%d/%Y %H:%M:%S',      # 07/09/2025 18:00:00
+                        '%d/%m/%Y %H:%M',         # 09/07/2025 18:00
+                        '%d/%m/%Y %H:%M:%S',      # 09/07/2025 18:00:00
+                        '%Y.%m.%d %H:%M',         # 2025.07.09 18:00
+                        '%Y/%m/%d %H:%M',         # 2025/07/09 18:00
+                    ]
+                    
+                    date_str = str(due_date_str).strip()
+                    
+                    for fmt in date_formats:
+                        try:
+                            parsed_date = datetime.strptime(date_str, fmt).date()
+                            if debug_info and parsed_date == today:
+                                print(f"🎯 {debug_info} - 오늘 마감 발견! '{date_str}' -> {parsed_date} (형식: {fmt})")
+                            elif debug_info:
+                                print(f"✅ {debug_info} - 파싱 성공: '{date_str}' -> {parsed_date} (형식: {fmt})")
+                            return parsed_date
+                        except ValueError:
+                            continue
+                    
+                    print(f"⚠️ 날짜 형식 파싱 실패: '{due_date_str}' {debug_info}")
+                    return None
+                    
+                except Exception as e:
+                    print(f"⚠️ 날짜 파싱 오류: '{due_date_str}' {debug_info} - {e}")
+                    return None
+            
+            # 제외 대상 로드
+            exclude_values = self.load_exclude_values()
+            print(f"🚫 제외 대상: {exclude_values}")
+            
+            # 각 행별로 Due Date 체크 (강화된 디버깅)
+            due_date_count = 0
+            today_due_count = 0
+            excluded_count = 0
+            empty_due_date_count = 0
+            completed_count = 0
+            
+            print(f"\n🔍 상세 Due Date 분석 시작 (총 {len(df)}행)...")
+            
+            for idx, row in df.iterrows():
+                person_name = row['Tasklist']
+                task_name = row['Task']
+                due_date_str = row['Due Date']
+                status = row.get('Status', '')  # Status 컬럼 확인
+                
+                # 제외 대상 건너뛰기 (팀명 등)
+                if person_name in exclude_values:
+                    excluded_count += 1
+                    print(f"  행 {idx+1}: 제외 대상 - {person_name}")
+                    continue
+                
+                # Completed 상태 제외 (Active만 알림)
+                if status == 'Completed':
+                    completed_count += 1
+                    if idx < 10:  # 처음 10개만 로그 출력
+                        print(f"  행 {idx+1}: Completed 상태 제외 - {person_name}, Status: '{status}'")
+                    continue
+                
+                # Due Date 파싱
+                debug_info = f"행 {idx+1} ({person_name})"
+                due_date = parse_due_date(due_date_str, debug_info)
+                
+                if not due_date:
+                    empty_due_date_count += 1
+                    if idx < 10:  # 처음 10개만 로그 출력
+                        print(f"  행 {idx+1}: Due Date 없음 - {person_name}, Due Date: '{due_date_str}'")
+                    continue
+                
+                due_date_count += 1
+                
+                # 🎯 모든 Due Date와 오늘 날짜 비교 로그
+                if idx < 10:  # 처음 10개만 상세 로그
+                    print(f"  행 {idx+1}: {person_name}, Due Date: {due_date}, Status: '{status}', 오늘: {today}, 같음: {due_date == today}")
+                
+                # 오늘 마감인 Active 작업만 체크
+                if due_date == today:
+                    today_due_count += 1
+                    person_group = get_name_group(person_name)
+                    task_display = str(task_name)[:30] + "..." if len(str(task_name)) > 30 else str(task_name)
+                    
+                    print(f"🎯 오늘 마감 Active 작업 발견! 행 {idx+1}: {person_name} - {task_name} (Status: {status})")
+                    
+                    if current_time < work_end_time:
+                        # 아직 업무시간 내
+                        alert_msg = f"{person_group}님 - {task_display} (오늘 종료 예정)"
+                    else:
+                        # 업무시간 지남
+                        alert_msg = f"{person_group}님 - {task_display} (업무종료시간 지남)"
+                    
+                    due_date_alerts.append(alert_msg)
+                    print(f"📅 마감일 알림 생성: {alert_msg}")
+            
+            print(f"\n📊 Due Date 체크 최종 결과:")
+            print(f"  - 전체 행: {len(df)}개")
+            print(f"  - 제외된 행 (팀명 등): {excluded_count}개")
+            print(f"  - Completed 상태 제외: {completed_count}개")
+            print(f"  - Due Date 없는 행: {empty_due_date_count}개")
+            print(f"  - Due Date 있는 Active 작업: {due_date_count}개")
+            print(f"  - 오늘 마감 Active 작업: {today_due_count}개")
+            print(f"  - 알림 생성: {len(due_date_alerts)}개")
+            
+            return due_date_alerts
+            
+        except Exception as e:
+            error_msg = f"Due Date 체크 중 오류 발생: {str(e)}"
+            print(f"❌ {error_msg}")
+            return [error_msg]
+    
     def validate_csv_data(self, df, min_hours=MIN_REQUIRED_HOURS):
         """
-        CSV 데이터 검증 - 시간 합계 + 태그 검증
+        CSV 데이터 검증 - 시간 합계 + 태그 검증 + Due Date 체크
         """
         try:
             print("🔍 CSV 데이터 검증 시작...")
             print(f"⏱️ 검증 기준: {min_hours}시간 (설정값: MIN_REQUIRED_HOURS)")
             
             if len(df.columns) < 4:
-                return ["❌ 열 수가 부족합니다. 최소 4개 열이 필요합니다."]
+                return ["❌ 열 수가 부족합니다. 최소 4개 열이 필요합니다."], []
             
-            # 열 이름 설정
-            df.columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
+            # 열 이름 설정 (원본 19열 그대로 유지)
+            original_columns = ['Project', 'Tasklist', 'Task', 'Description', 'Assigned To', 'Followers',
+                              'Creation Date', 'Completion Date', 'Start Date', 'Due Date', 'Tags',
+                              'Status', 'Points', 'Time Spent', 'Checklist', 'Comments', 'Files',
+                              'Subtask', 'Subtask Reference ID']
+            
+            # 실제 컬럼 수에 맞게 조정
+            if len(df.columns) >= len(original_columns):
+                df.columns = original_columns[:len(df.columns)]
+            else:
+                # 필수 컬럼만 설정
+                essential_columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
+                if len(df.columns) >= 4:
+                    df.columns = essential_columns + [f'Col_{i}' for i in range(4, len(df.columns))]
             
             # 1. 태그 설정 로드
             first_tags_required_second, first_tags_optional_second, second_tags = self.load_allowed_tags()
             
-            # 2. 시간 검증 (기존 로직)
+            # 2. 시간 검증 (기존 로직) - 4열 기준으로
             validation_issues = self._validate_time_totals(df, min_hours)
             
-            # 3. 태그 검증 (개선된 로직)
+            # 3. 태그 검증 (개선된 로직) - 원본 데이터 사용
             tag_issues = self.validate_tags(df, first_tags_required_second, first_tags_optional_second, second_tags)
             
-            # 두 검증 결과 합치기
+            # 4. Due Date 체크 (새로운 기능) - 원본 데이터 사용
+            due_date_alerts = self.check_due_date_alerts(df, WORK_END_TIME_HOUR)
+            
+            # 검증 결과 합치기 (Due Date는 별도 반환)
             all_issues = validation_issues + tag_issues
             
             if not all_issues:
                 print("✅ 모든 검증 통과! (시간 합계 + 태그 모두 정상)")
             else:
                 print(f"❌ 총 {len(all_issues)}개의 검증 이슈 발견")
+            
+            if due_date_alerts:
+                print(f"📅 {len(due_date_alerts)}개의 마감일 알림")
+            else:
+                print("📅 오늘 마감인 작업 없음")
                 
-            return all_issues
+            return all_issues, due_date_alerts
             
         except Exception as e:
             error_msg = f"검증 중 오류 발생: {str(e)}"
             print(f"❌ {error_msg}")
-            return [error_msg]
+            return [error_msg], []
     
     def _validate_time_totals(self, df, min_hours):
         """시간 합계 검증 (기존 로직을 별도 메서드로 분리)"""
@@ -577,9 +754,22 @@ class TaskworldSeleniumDownloader:
             else:
                 return name_str
         
+        # Time Spent 컬럼 찾기
+        time_column = None
+        if 'Time Spent' in df.columns:
+            time_column = 'Time Spent'
+        elif 'Time_Spent' in df.columns:
+            time_column = 'Time_Spent'
+        else:
+            # 4번째 컬럼을 시간 컬럼으로 사용
+            if len(df.columns) >= 4:
+                time_column = df.columns[3]
+            else:
+                return ["시간 데이터 컬럼을 찾을 수 없습니다."]
+        
         # 시간 데이터 변환
         print("⏱️ 시간 데이터 변환 중...")
-        df['Time_Hours'] = df['Time_Spent'].apply(convert_time_to_hours)
+        df['Time_Hours'] = df[time_column].apply(convert_time_to_hours)
         
         # 이름 그룹 생성
         print("👥 이름 그룹핑 중...")
@@ -631,18 +821,19 @@ class TaskworldSeleniumDownloader:
                 df_filtered = df
                 removed_count = 0
             
-            # 열 선택
-            missing_columns = [col for col in columns if col not in df_filtered.columns]
+            # 검증 (원본 19열 데이터로 검증 - Due Date 포함)
+            validation_issues, due_date_alerts = self.validate_csv_data(df_filtered.copy(), min_hours=MIN_REQUIRED_HOURS)
+            
+            # 열 선택 (최종 파일용 4열만)
+            final_columns = ['Tasklist', 'Task', 'Tags', 'Time Spent']
+            missing_columns = [col for col in final_columns if col not in df_filtered.columns]
             if missing_columns:
-                return None, None, f"열을 찾을 수 없음: {missing_columns}", []
+                return None, None, f"열을 찾을 수 없음: {missing_columns}", [], []
             
-            selected_df = df_filtered[columns]
+            selected_df = df_filtered[final_columns]
             
-            # 검증 (이 과정에서 E열, F열이 추가될 수 있음)
-            validation_issues = self.validate_csv_data(selected_df.copy(), min_hours=MIN_REQUIRED_HOURS)
-            
-            # ⭐ 최종 파일 저장 시에는 원본 4개 열만 저장 ⭐
-            final_df = selected_df[['Tasklist', 'Task', 'Tags', 'Time Spent']]  # E열, F열 제외
+            # ⭐ 최종 파일 저장 시에는 4개 열만 저장 ⭐
+            final_df = selected_df[['Tasklist', 'Task', 'Tags', 'Time Spent']]
             
             # 파일 저장
             output_file = OUTPUT_FILENAME
@@ -652,15 +843,15 @@ class TaskworldSeleniumDownloader:
             final_df.to_csv(output_file, index=False, header=False, encoding='utf-8-sig')
             print(f"✅ CSV 처리 완료: {len(final_df)}행 → {output_file} (검증용 열 제외)")
             
-            return selected_df, removed_count, output_file, validation_issues
+            return selected_df, removed_count, output_file, validation_issues, due_date_alerts
             
         except Exception as e:
-            return None, None, f"CSV 처리 오류: {str(e)}", []
+            return None, None, f"CSV 처리 오류: {str(e)}", [], []
 
     # ⭐ 검증 전용 함수들 ⭐
 
-    def send_validation_report_to_slack(self, validation_issues, channel_env_var="SLACK_CHANNEL_VALIDATION"):
-        """검증 결과만 슬랙에 전송 (파일 업로드 없이) - 오류 발견시 해당 인원 표시"""
+    def send_validation_report_to_slack(self, validation_issues, due_date_alerts=None, channel_env_var="SLACK_CHANNEL_VALIDATION"):
+        """검증 결과 + Due Date 알림을 슬랙에 전송 (파일 업로드 없이) - 오류 발견시 해당 인원 표시"""
         if not self.slack_client:
             print("⚠️ 슬랙 클라이언트 없음")
             return False
@@ -670,8 +861,12 @@ class TaskworldSeleniumDownloader:
             validation_channel = os.getenv(channel_env_var, "#아트실")
             print(f"📨 검증 리포트 전송 채널: {validation_channel}")
             
-            if not validation_issues:
-                # 검증 성공 메시지
+            # 메시지 구성
+            if not validation_issues and not due_date_alerts:
+                # 모든 검증 성공 + 마감일 알림 없음
+                message_text = "[태스크월드 검토] 오류 없음 👍\n"
+            elif not validation_issues and due_date_alerts:
+                # 검증 성공 + 마감일 알림 있음
                 message_text = "[태스크월드 검토] 오류 없음 👍\n"
             else:
                 # 검증 실패 시 오류 인원 추출
@@ -690,6 +885,13 @@ class TaskworldSeleniumDownloader:
                 for issue in validation_issues:
                     message_text += f"\n- {issue}"
                 message_text += f"```"
+            
+            # Due Date 알림 추가 (코드 블록으로 표시)
+            if due_date_alerts:
+                message_text += f"\n\n```[점검 필요]"
+                for alert in due_date_alerts:
+                    message_text += f"\n- {alert}"
+                message_text += f"\n```"
             
             # 메시지 전송
             msg_response = self.slack_client.chat_postMessage(
@@ -749,28 +951,28 @@ class TaskworldSeleniumDownloader:
             if not email or not password:
                 error_msg = "환경변수 필요: TASKWORLD_EMAIL, TASKWORLD_PASSWORD"
                 print(f"❌ {error_msg}")
-                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                self.send_validation_report_to_slack([error_msg], [], channel_env_var)
                 return False
             
             # 1. 드라이버 설정
             print("1️⃣ 드라이버 설정...")
             if not self.setup_driver():
                 error_msg = "브라우저 드라이버 설정 실패"
-                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                self.send_validation_report_to_slack([error_msg], [], channel_env_var)
                 return False
             
             # 2. 로그인
             print("\n2️⃣ 로그인...")
             if not self.login_to_taskworld(email, password):
                 error_msg = "태스크월드 로그인 실패"
-                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                self.send_validation_report_to_slack([error_msg], [], channel_env_var)
                 return False
             
             # 3. 워크스페이스 이동
             print("\n3️⃣ 워크스페이스 이동...")
             if not self.navigate_to_workspace(workspace):
                 error_msg = f"워크스페이스 '{workspace}' 접속 실패"
-                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                self.send_validation_report_to_slack([error_msg], [], channel_env_var)
                 return False
             
             # 4. CSV 내보내기
@@ -779,18 +981,18 @@ class TaskworldSeleniumDownloader:
             
             if not csv_file:
                 error_msg = "CSV 다운로드 실패"
-                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                self.send_validation_report_to_slack([error_msg], [], channel_env_var)
                 return False
             
             print(f"\n✅ 태스크월드 CSV 다운로드 완료: {csv_file}")
 
             # 5. CSV 처리 + 검증
             print("\n5️⃣ CSV 파일 처리 및 검증...")
-            result_df, removed_count, processed_file, validation_issues = self.process_csv(csv_file)
+            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file)
             
             if result_df is None:
                 error_msg = processed_file
-                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                self.send_validation_report_to_slack([error_msg], [], channel_env_var)
                 return False
             
             print(f"✅ CSV 처리 완료: {processed_file}")
@@ -803,9 +1005,17 @@ class TaskworldSeleniumDownloader:
             else:
                 print("✅ 모든 데이터 검증 통과")
             
-            # 6. 검증 결과만 슬랙 전송 (파일 업로드 없음)
+            # Due Date 알림 표시
+            if due_date_alerts:
+                print(f"📅 마감일 알림 {len(due_date_alerts)}개:")
+                for alert in due_date_alerts:
+                    print(f"  - {alert}")
+            else:
+                print("📅 오늘 마감인 작업 없음")
+            
+            # 6. 검증 결과 + Due Date 알림 슬랙 전송 (파일 업로드 없음)
             print("\n6️⃣ 검증 결과 슬랙 전송...")
-            success = self.send_validation_report_to_slack(validation_issues, channel_env_var)
+            success = self.send_validation_report_to_slack(validation_issues, due_date_alerts, channel_env_var)
             
             # 7. 파일 정리
             print("\n7️⃣ 파일 정리...")
@@ -847,7 +1057,7 @@ class TaskworldSeleniumDownloader:
             
             # 오류도 슬랙에 전송
             try:
-                self.send_validation_report_to_slack([error_msg], channel_env_var)
+                self.send_validation_report_to_slack([error_msg], [], channel_env_var)
             except:
                 pass
             
@@ -859,9 +1069,9 @@ class TaskworldSeleniumDownloader:
                 self.driver.quit()
                 print("🔚 브라우저 종료")
 
-    def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None):
+    def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None, due_date_alerts=None):
         """
-        슬랙에 리포트 전송 (파일 업로드 + 메시지) - 파일명 표시 및 쓰레드 오류 지원
+        슬랙에 리포트 전송 (파일 업로드 + 메시지) - 파일명 표시 및 쓰레드 오류 지원 + Due Date 알림
         """
         if not self.slack_client:
             print("⚠️ 슬랙 클라이언트가 없어 전송을 건너뜁니다.")
@@ -907,6 +1117,13 @@ class TaskworldSeleniumDownloader:
                     message_text += f"\n[검증 오류]"
                     for issue in validation_issues:
                         message_text += f"\n- {issue}"
+                    message_text += f"\n```"
+                
+                # ⭐ Due Date 알림 추가 (코드 블록으로 표시) ⭐
+                if due_date_alerts:
+                    message_text += f"\n\n```[점검 필요]"
+                    for alert in due_date_alerts:
+                        message_text += f"\n- {alert}"
                     message_text += f"\n```"
                     
             msg_response = self.slack_client.chat_postMessage(
@@ -1082,7 +1299,7 @@ class TaskworldSeleniumDownloader:
             if existing_csvs:
                 print(f"📋 정리 후 남은 파일들: {[os.path.basename(f) for f in existing_csvs]}")
             
-            time.sleep(5)
+            time.sleep(3)
             
             # 1단계: URL을 직접 수정해서 설정 페이지로 이동
             print("⚙️ URL을 직접 수정해서 설정 페이지로 이동...")
@@ -1093,7 +1310,7 @@ class TaskworldSeleniumDownloader:
                 settings_url = current_url.replace("view=board", "view=settings&menu=general")
                 print(f"📄 설정 페이지 URL: {settings_url}")
                 self.driver.get(settings_url)
-                time.sleep(5)  # 설정 페이지 로딩 대기
+                time.sleep(3)  # 설정 페이지 로딩 대기
                 print("✅ 설정 페이지로 이동 완료")
             else:
                 print("⚠️ URL에 view=board가 없어서 직접 설정 페이지 구성을 시도합니다...")
@@ -1105,7 +1322,7 @@ class TaskworldSeleniumDownloader:
                 
                 print(f"📄 구성된 설정 URL: {settings_url}")
                 self.driver.get(settings_url)
-                time.sleep(5)
+                time.sleep(3)
             
             # 2단계: CSV 내보내기 버튼 찾기
             print("📥 CSV 내보내기 버튼 찾는 중...")
@@ -1219,7 +1436,7 @@ class TaskworldSeleniumDownloader:
             except Exception as e:
                 print(f"⚠️ ActionChains 클릭 실패: {str(e).split('Stacktrace:')[0].strip()}")
                 
-            time.sleep(8)
+            time.sleep(3)
             
             print("📥 CSV 다운로드 시작...")
             
@@ -1343,7 +1560,7 @@ class TaskworldSeleniumDownloader:
 
             # 5. CSV 처리 + 검증
             print("\n5️⃣ CSV 파일 처리 및 검증...")
-            result_df, removed_count, processed_file, validation_issues = self.process_csv(csv_file)
+            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file)
             
             if result_df is None:
                 error_msg = processed_file
@@ -1360,7 +1577,15 @@ class TaskworldSeleniumDownloader:
             else:
                 print("✅ 모든 데이터 검증 통과")
             
-            # 6. 슬랙 전송 (검증 결과 포함)
+            # Due Date 알림 표시
+            if due_date_alerts:
+                print(f"📅 마감일 알림 {len(due_date_alerts)}개:")
+                for alert in due_date_alerts:
+                    print(f"  - {alert}")
+            else:
+                print("📅 오늘 마감인 작업 없음")
+            
+            # 6. 슬랙 전송 (검증 결과 + Due Date 알림 포함)
             print("\n6️⃣ 슬랙 리포트 전송...")
             if self.slack_client:
                 # 통계 정보 구성
@@ -1369,7 +1594,7 @@ class TaskworldSeleniumDownloader:
                 print(f"📊 전송할 통계: {stats_info}")
                 print(f"📁 전송할 파일: {processed_file}")
                 
-                success = self.send_to_slack(processed_file, stats_info, None, validation_issues)
+                success = self.send_to_slack(processed_file, stats_info, None, validation_issues, due_date_alerts)
                 if success:
                     print("✅ 슬랙 전송 완료! (파일+메시지 모두 성공)")
                 else:
@@ -1443,6 +1668,7 @@ if __name__ == "__main__":
     print(f"📂 워크스페이스: {WORKSPACE_NAME}")
     print(f"📄 출력 파일명: {OUTPUT_FILENAME}")
     print(f"⏱️ 최소 필수 시간: {MIN_REQUIRED_HOURS}시간")
+    print(f"🕕 업무 종료 시간: {WORK_END_TIME_HOUR}시")
     
     # 실행 모드 확인
     mode = sys.argv[1] if len(sys.argv) > 1 else "full"
