@@ -141,7 +141,7 @@ class TaskworldSeleniumDownloader:
             # 브라우저 확인용 대기
             if not self.headless:
                 print("⏳ 브라우저 창 확인을 위해 3초 대기...")
-                time.sleep(8)
+                time.sleep(3)
             
             return True
             
@@ -190,7 +190,7 @@ class TaskworldSeleniumDownloader:
             self.driver.get("https://asia-enterprise.taskworld.com/login")
             
             # 페이지 로딩 대기
-            time.sleep(8)
+            time.sleep(3)
             print(f"📄 현재 페이지 URL: {self.driver.current_url}")
             print(f"📄 페이지 제목: {self.driver.title}")
             
@@ -233,7 +233,7 @@ class TaskworldSeleniumDownloader:
             
             # 로그인 완료 대기
             print("⏳ 로그인 완료 대기 중...")
-            time.sleep(10)
+            time.sleep(5)
             
             print(f"📄 로그인 후 URL: {self.driver.current_url}")
             print("✅ 이메일 로그인 완료!")
@@ -250,7 +250,7 @@ class TaskworldSeleniumDownloader:
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
             print(f"📄 현재 URL: {self.driver.current_url}")
             
-            time.sleep(8)  # 페이지 로딩 대기
+            time.sleep(3)  # 페이지 로딩 대기
             
             # 1단계: URL을 직접 수정해서 프로젝트 페이지로 이동
             print("🔗 URL을 직접 수정해서 프로젝트 페이지로 이동...")
@@ -261,7 +261,7 @@ class TaskworldSeleniumDownloader:
                 project_url = current_url.replace("#/home", "#/projects")
                 print(f"📄 이동할 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(20)  # 프로젝트 페이지 로딩 대기
+                time.sleep(3)  # 프로젝트 페이지 로딩 대기
                 print("✅ 프로젝트 페이지로 이동 완료")
             else:
                 print("⚠️ URL에 #/home이 없어서 직접 프로젝트 페이지 구성을 시도합니다...")
@@ -274,7 +274,7 @@ class TaskworldSeleniumDownloader:
                 
                 print(f"📄 구성된 URL: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(20)
+                time.sleep(3)
             
             # 2단계: 워크스페이스 찾기
             print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
@@ -315,7 +315,7 @@ class TaskworldSeleniumDownloader:
             
             # 워크스페이스 로딩 대기
             print("⏳ 워크스페이스 로딩 대기...")
-            time.sleep(20)
+            time.sleep(5)
             
             print(f"📄 워크스페이스 접속 후 URL: {self.driver.current_url}")
             print(f"✅ '{workspace_name}' 워크스페이스 접속 완료")
@@ -638,13 +638,23 @@ class TaskworldSeleniumDownloader:
             print(f"❌ {error_msg}")
             return [error_msg]
     
-    def validate_csv_data(self, df, min_hours=MIN_REQUIRED_HOURS):
+    def validate_csv_data(self, df, min_hours=MIN_REQUIRED_HOURS, include_due_date_check=True):
         """
-        CSV 데이터 검증 - 시간 합계 + 태그 검증 + Due Date 체크
+        CSV 데이터 검증 - 시간 합계 + 태그 검증 + Due Date 체크 (선택적)
+        
+        Args:
+            df: 검증할 DataFrame
+            min_hours: 최소 필수 시간
+            include_due_date_check: Due Date 체크 포함 여부 (검증 모드에서만 True)
         """
         try:
             print("🔍 CSV 데이터 검증 시작...")
             print(f"⏱️ 검증 기준: {min_hours}시간 (설정값: MIN_REQUIRED_HOURS)")
+            
+            if include_due_date_check:
+                print("📅 Due Date 체크 포함")
+            else:
+                print("📅 Due Date 체크 제외 (전체 모드)")
             
             if len(df.columns) < 4:
                 return ["❌ 열 수가 부족합니다. 최소 4개 열이 필요합니다."], []
@@ -673,8 +683,10 @@ class TaskworldSeleniumDownloader:
             # 3. 태그 검증 (개선된 로직) - 원본 데이터 사용
             tag_issues = self.validate_tags(df, first_tags_required_second, first_tags_optional_second, second_tags)
             
-            # 4. Due Date 체크 (새로운 기능) - 원본 데이터 사용
-            due_date_alerts = self.check_due_date_alerts(df, WORK_END_TIME_HOUR)
+            # 4. Due Date 체크 (검증 모드에서만 실행)
+            due_date_alerts = []
+            if include_due_date_check:
+                due_date_alerts = self.check_due_date_alerts(df, WORK_END_TIME_HOUR)
             
             # 검증 결과 합치기 (Due Date는 별도 반환)
             all_issues = validation_issues + tag_issues
@@ -684,11 +696,12 @@ class TaskworldSeleniumDownloader:
             else:
                 print(f"❌ 총 {len(all_issues)}개의 검증 이슈 발견")
             
-            if due_date_alerts:
-                print(f"📅 {len(due_date_alerts)}개의 마감일 알림")
-            else:
-                print("📅 오늘 마감인 작업 없음")
-                
+            if include_due_date_check:
+                if due_date_alerts:
+                    print(f"📅 {len(due_date_alerts)}개의 마감일 알림")
+                else:
+                    print("📅 오늘 마감인 작업 없음")
+            
             return all_issues, due_date_alerts
             
         except Exception as e:
@@ -789,8 +802,14 @@ class TaskworldSeleniumDownloader:
         
         return validation_issues
     
-    def process_csv(self, input_file, columns=['Tasklist', 'Task', 'Tags', 'Time Spent']):
-        """CSV 파일 처리 - 검증용 열 제외하고 최종 파일 저장"""
+    def process_csv(self, input_file, columns=['Tasklist', 'Task', 'Tags', 'Time Spent'], include_due_date_check=True):
+        """CSV 파일 처리 - 검증용 열 제외하고 최종 파일 저장
+        
+        Args:
+            input_file: 입력 CSV 파일 경로
+            columns: 최종 출력할 컬럼들
+            include_due_date_check: Due Date 체크 포함 여부
+        """
         try:
             print("📊 CSV 파일 처리 시작...")
             
@@ -808,8 +827,8 @@ class TaskworldSeleniumDownloader:
                 df_filtered = df
                 removed_count = 0
             
-            # 검증 (원본 19열 데이터로 검증 - Due Date 포함)
-            validation_issues, due_date_alerts = self.validate_csv_data(df_filtered.copy(), min_hours=MIN_REQUIRED_HOURS)
+            # 검증 (원본 19열 데이터로 검증 - Due Date 포함 여부는 파라미터로 결정)
+            validation_issues, due_date_alerts = self.validate_csv_data(df_filtered.copy(), min_hours=MIN_REQUIRED_HOURS, include_due_date_check=include_due_date_check)
             
             # 열 선택 (최종 파일용 4열만)
             final_columns = ['Tasklist', 'Task', 'Tags', 'Time Spent']
@@ -973,9 +992,9 @@ class TaskworldSeleniumDownloader:
             
             print(f"\n✅ 태스크월드 CSV 다운로드 완료: {csv_file}")
 
-            # 5. CSV 처리 + 검증
+            # 5. CSV 처리 + 검증 (Due Date 체크 포함)
             print("\n5️⃣ CSV 파일 처리 및 검증...")
-            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file)
+            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file, include_due_date_check=True)
             
             if result_df is None:
                 error_msg = processed_file
@@ -1100,7 +1119,7 @@ class TaskworldSeleniumDownloader:
 
                 # ⭐ 검증 결과 추가 (오류가 있을 때만) ⭐
                 if validation_issues:
-                    message_text += f"\n\n```"
+                    message_text += f"\n```"
                     message_text += f"\n[검증 오류]"
                     for issue in validation_issues:
                         message_text += f"\n- {issue}"
@@ -1286,7 +1305,7 @@ class TaskworldSeleniumDownloader:
             if existing_csvs:
                 print(f"📋 정리 후 남은 파일들: {[os.path.basename(f) for f in existing_csvs]}")
             
-            time.sleep(8)
+            time.sleep(3)
             
             # 1단계: URL을 직접 수정해서 설정 페이지로 이동
             print("⚙️ URL을 직접 수정해서 설정 페이지로 이동...")
@@ -1297,7 +1316,7 @@ class TaskworldSeleniumDownloader:
                 settings_url = current_url.replace("view=board", "view=settings&menu=general")
                 print(f"📄 설정 페이지 URL: {settings_url}")
                 self.driver.get(settings_url)
-                time.sleep(8)  # 설정 페이지 로딩 대기
+                time.sleep(3)  # 설정 페이지 로딩 대기
                 print("✅ 설정 페이지로 이동 완료")
             else:
                 print("⚠️ URL에 view=board가 없어서 직접 설정 페이지 구성을 시도합니다...")
@@ -1309,7 +1328,7 @@ class TaskworldSeleniumDownloader:
                 
                 print(f"📄 구성된 설정 URL: {settings_url}")
                 self.driver.get(settings_url)
-                time.sleep(8)
+                time.sleep(3)
             
             # 2단계: CSV 내보내기 버튼 찾기
             print("📥 CSV 내보내기 버튼 찾는 중...")
@@ -1423,7 +1442,7 @@ class TaskworldSeleniumDownloader:
             except Exception as e:
                 print(f"⚠️ ActionChains 클릭 실패: {str(e).split('Stacktrace:')[0].strip()}")
                 
-            time.sleep(8)
+            time.sleep(3)
             
             print("📥 CSV 다운로드 시작...")
             
@@ -1545,9 +1564,9 @@ class TaskworldSeleniumDownloader:
             
             print(f"\n✅ 태스크월드 CSV 다운로드 완료: {csv_file}")
 
-            # 5. CSV 처리 + 검증
+            # 5. CSV 처리 + 검증 (Due Date 체크 제외)
             print("\n5️⃣ CSV 파일 처리 및 검증...")
-            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file)
+            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file, include_due_date_check=False)
             
             if result_df is None:
                 error_msg = processed_file
@@ -1633,7 +1652,7 @@ class TaskworldSeleniumDownloader:
             # 브라우저 종료 (headless=False일 때는 5초 대기)
             if not self.headless:
                 print("\n⏳ 브라우저 확인을 위해 5초 후 종료...")
-                time.sleep(10)
+                time.sleep(5)
             
             if self.driver:
                 self.driver.quit()
