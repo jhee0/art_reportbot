@@ -638,6 +638,82 @@ class TaskworldSeleniumDownloader:
             print(f"❌ {error_msg}")
             return [error_msg]
     
+    def check_assigned_to_alerts(self, df):
+        """Assigned To가 비어있는 Active 작업 체크"""
+        assigned_to_alerts = []
+        
+        try:
+            print(f"👤 Assigned To 체크 시작...")
+            
+            # Assigned To 열이 존재하는지 확인
+            if 'Assigned To' not in df.columns:
+                print("⚠️ Assigned To 열이 존재하지 않음 - Assigned To 체크 건너뜀")
+                print(f"📋 사용 가능한 컬럼: {list(df.columns)}")
+                return assigned_to_alerts
+            
+            # 이름 그룹핑 함수
+            def get_name_group(tasklist_name):
+                if pd.isna(tasklist_name) or tasklist_name == '':
+                    return '미분류'
+                name_str = str(tasklist_name).strip()
+                return name_str[:3] if len(name_str) >= 3 else name_str
+            
+            # 제외 대상 로드
+            exclude_values = self.load_exclude_values()
+            
+            # 각 행별로 Assigned To 체크
+            assigned_to_count = 0
+            excluded_count = 0
+            completed_count = 0
+            empty_assigned_to_count = 0
+            
+            for idx, row in df.iterrows():
+                person_name = row['Tasklist']
+                task_name = row['Task']
+                assigned_to = row['Assigned To']
+                status = row.get('Status', '')
+                
+                # 제외 대상 건너뛰기 (팀명 등)
+                if person_name in exclude_values:
+                    excluded_count += 1
+                    continue
+                
+                # Completed 상태 제외 (Active만 체크)
+                if status == 'Completed':
+                    completed_count += 1
+                    continue
+                
+                assigned_to_count += 1
+                
+                # Assigned To가 비어있는지 확인
+                is_empty_assigned = pd.isna(assigned_to) or str(assigned_to).strip() == '' or assigned_to == 0
+                
+                if is_empty_assigned:
+                    empty_assigned_to_count += 1
+                    person_group = get_name_group(person_name)
+                    task_display = str(task_name)[:30] + "..." if len(str(task_name)) > 30 else str(task_name)
+                    
+                    print(f"👤 담당자 비어있는 Active 작업 발견! {person_name} - {task_name} (Status: {status})")
+                    
+                    alert_msg = f"{person_group}님 : {task_display} (업무 담당자가 비어있음)"
+                    assigned_to_alerts.append(alert_msg)
+                    print(f"👤 담당자 알림 생성: {alert_msg}")
+            
+            print(f"\n📊 Assigned To 체크 최종 결과:")
+            print(f"  - 전체 행: {len(df)}개")
+            print(f"  - 제외된 행 (팀명 등): {excluded_count}개")
+            print(f"  - Completed 상태 제외: {completed_count}개")
+            print(f"  - Active 작업: {assigned_to_count}개")
+            print(f"  - 담당자 비어있는 Active 작업: {empty_assigned_to_count}개")
+            print(f"  - 담당자 알림 생성: {len(assigned_to_alerts)}개")
+            
+            return assigned_to_alerts
+            
+        except Exception as e:
+            error_msg = f"Assigned To 체크 중 오류 발생: {str(e)}"
+            print(f"❌ {error_msg}")
+            return [error_msg]
+    
     def validate_csv_data(self, df, min_hours=MIN_REQUIRED_HOURS, include_due_date_check=True):
         """
         CSV 데이터 검증 - 시간 합계 + 태그 검증 + Due Date 체크 (선택적)
@@ -660,6 +736,7 @@ class TaskworldSeleniumDownloader:
                 return ["❌ 열 수가 부족합니다. 최소 4개 열이 필요합니다."], []
             
             # 열 이름 설정 (원본 19열 그대로 유지)
+            print(f"🔍 컬럼 설정 전 - df.columns 수: {len(df.columns)}")
             original_columns = ['Project', 'Tasklist', 'Task', 'Description', 'Assigned To', 'Followers',
                               'Creation Date', 'Completion Date', 'Start Date', 'Due Date', 'Tags',
                               'Status', 'Points', 'Time Spent', 'Checklist', 'Comments', 'Files',
@@ -668,11 +745,17 @@ class TaskworldSeleniumDownloader:
             # 실제 컬럼 수에 맞게 조정
             if len(df.columns) >= len(original_columns):
                 df.columns = original_columns[:len(df.columns)]
+                print(f"🔍 컬럼 설정 완료 - 19열 형식 사용")
             else:
                 # 필수 컬럼만 설정
                 essential_columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
                 if len(df.columns) >= 4:
                     df.columns = essential_columns + [f'Col_{i}' for i in range(4, len(df.columns))]
+                    print(f"🔍 컬럼 설정 완료 - 필수 컬럼 형식 사용")
+                else:
+                    print(f"❌ 컬럼 수 부족: {len(df.columns)}개")
+            
+            print(f"🔍 최종 컬럼명: {list(df.columns)}")
             
             # 1. 태그 설정 로드
             first_tags_required_second, first_tags_optional_second, second_tags = self.load_allowed_tags()
@@ -683,12 +766,28 @@ class TaskworldSeleniumDownloader:
             # 3. 태그 검증 (개선된 로직) - 원본 데이터 사용
             tag_issues = self.validate_tags(df, first_tags_required_second, first_tags_optional_second, second_tags)
             
-            # 4. Due Date 체크 (검증 모드에서만 실행)
+            # 4. Due Date 체크 + Assigned To 체크 (검증 모드에서만 실행)
             due_date_alerts = []
+            assigned_to_alerts = []
             if include_due_date_check:
+                print("🔍 Due Date 체크 시작...")
                 due_date_alerts = self.check_due_date_alerts(df, WORK_END_TIME_HOUR)
+                print(f"🔍 Due Date 체크 완료: {len(due_date_alerts)}개")
+                
+                print("🔍 Assigned To 체크 시작...")
+                assigned_to_alerts = self.check_assigned_to_alerts(df)
+                print(f"🔍 Assigned To 체크 완료: {len(assigned_to_alerts)}개")
             
-            # 검증 결과 합치기 (Due Date는 별도 반환)
+            # 🚨 문제 해결: 기존 방식대로 due_date_alerts 반환하되, 내용만 합치기
+            combined_alerts = due_date_alerts + assigned_to_alerts
+            
+            print(f"🔍 validate_csv_data 알림 합치기 결과:")
+            print(f"  - due_date_alerts: {len(due_date_alerts)}개")
+            print(f"  - assigned_to_alerts: {len(assigned_to_alerts)}개")
+            print(f"  - combined_alerts: {len(combined_alerts)}개")
+            print(f"  - combined_alerts 내용: {combined_alerts}")
+            
+            # 검증 결과 합치기
             all_issues = validation_issues + tag_issues
             
             if not all_issues:
@@ -697,16 +796,24 @@ class TaskworldSeleniumDownloader:
                 print(f"❌ 총 {len(all_issues)}개의 검증 이슈 발견")
             
             if include_due_date_check:
-                if due_date_alerts:
-                    print(f"📅 {len(due_date_alerts)}개의 마감일 알림")
+                if combined_alerts:
+                    print(f"📅 총 {len(combined_alerts)}개의 점검 필요 알림 (마감일: {len(due_date_alerts)}개, 담당자: {len(assigned_to_alerts)}개)")
                 else:
-                    print("📅 오늘 마감인 작업 없음")
+                    print("📅 점검 필요한 작업 없음")
             
-            return all_issues, due_date_alerts
+            print(f"🔍 validate_csv_data 반환 직전:")
+            print(f"  - all_issues: {len(all_issues)}개")
+            print(f"  - combined_alerts: {len(combined_alerts)}개")
+            
+            # 🚨 기존 방식대로 due_date_alerts 위치에 combined_alerts 반환
+            return all_issues, combined_alerts
             
         except Exception as e:
+            import traceback
             error_msg = f"검증 중 오류 발생: {str(e)}"
             print(f"❌ {error_msg}")
+            print(f"🔍 상세 오류 정보:")
+            print(traceback.format_exc())
             return [error_msg], []
     
     def _validate_time_totals(self, df, min_hours):
@@ -849,6 +956,11 @@ class TaskworldSeleniumDownloader:
             final_df.to_csv(output_file, index=False, header=False, encoding='utf-8-sig')
             print(f"✅ CSV 처리 완료: {len(final_df)}행 → {output_file} (검증용 열 제외)")
             
+            print(f"🔍 process_csv 최종 반환 직전:")
+            print(f"  - validation_issues: {len(validation_issues)}개")
+            print(f"  - due_date_alerts: {len(due_date_alerts)}개")
+            print(f"  - due_date_alerts 내용: {due_date_alerts}")
+            
             return selected_df, removed_count, output_file, validation_issues, due_date_alerts
             
         except Exception as e:
@@ -856,8 +968,8 @@ class TaskworldSeleniumDownloader:
 
     # ⭐ 검증 전용 함수들 ⭐
 
-    def send_validation_report_to_slack(self, validation_issues, due_date_alerts=None, channel_env_var="SLACK_CHANNEL_VALIDATION"):
-        """검증 결과 + Due Date 알림을 슬랙에 전송 (파일 업로드 없이) - 오류 발견시 해당 인원 표시"""
+    def send_validation_report_to_slack(self, validation_issues, all_alerts=None, channel_env_var="SLACK_CHANNEL_VALIDATION"):
+        """검증 결과 + 점검 필요 알림을 슬랙에 전송 (파일 업로드 없이) - 오류 발견시 해당 인원 표시"""
         if not self.slack_client:
             print("⚠️ 슬랙 클라이언트 없음")
             return False
@@ -866,13 +978,18 @@ class TaskworldSeleniumDownloader:
             # 검증 전용 채널 가져오기
             validation_channel = os.getenv(channel_env_var, "#아트실")
             print(f"📨 검증 리포트 전송 채널: {validation_channel}")
+            print(f"🔍 슬랙 함수 내부 디버깅:")
+            print(f"  - validation_issues: {len(validation_issues) if validation_issues else 0}개")
+            print(f"  - all_alerts: {len(all_alerts) if all_alerts else 0}개")
+            print(f"  - all_alerts 타입: {type(all_alerts)}")
+            print(f"  - all_alerts 내용: {all_alerts}")
             
             # 메시지 구성
-            if not validation_issues and not due_date_alerts:
-                # 모든 검증 성공 + 마감일 알림 없음
+            if not validation_issues and not all_alerts:
+                # 모든 검증 성공 + 점검 필요 알림 없음
                 message_text = "[태스크월드 검토] 오류 없음 👍\n"
-            elif not validation_issues and due_date_alerts:
-                # 검증 성공 + 마감일 알림 있음
+            elif not validation_issues and all_alerts:
+                # 검증 성공 + 점검 필요 알림 있음
                 message_text = "[태스크월드 검토] 오류 없음 👍\n"
             else:
                 # 검증 실패 시 오류 인원 추출
@@ -887,15 +1004,15 @@ class TaskworldSeleniumDownloader:
                     message_text += f"🧨 확인 필요한 사람 : {people_list}\n"
                 
                 # 상세 오류 목록
-                message_text += f"```[오류 내용 확인]"
+                message_text += f"\n```[오류 내용 확인]"
                 for issue in validation_issues:
                     message_text += f"\n- {issue}"
                 message_text += f"```"
             
-            # Due Date 알림 추가 (코드 블록으로 표시)
-            if due_date_alerts:
+            # 점검 필요 알림 추가 (코드 블록으로 표시)
+            if all_alerts:
                 message_text += f"\n```[점검 필요]"
-                for alert in due_date_alerts:
+                for alert in all_alerts:
                     message_text += f"\n- {alert}"
                 message_text += f"\n```"
             
@@ -994,7 +1111,7 @@ class TaskworldSeleniumDownloader:
 
             # 5. CSV 처리 + 검증 (Due Date 체크 포함)
             print("\n5️⃣ CSV 파일 처리 및 검증...")
-            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file, include_due_date_check=True)
+            result_df, removed_count, processed_file, validation_issues, all_alerts = self.process_csv(csv_file, include_due_date_check=True)
             
             if result_df is None:
                 error_msg = processed_file
@@ -1012,16 +1129,20 @@ class TaskworldSeleniumDownloader:
                 print("✅ 모든 데이터 검증 통과")
             
             # Due Date 알림 표시
-            if due_date_alerts:
-                print(f"📅 마감일 알림 {len(due_date_alerts)}개:")
-                for alert in due_date_alerts:
+            if all_alerts:
+                print(f"📅 점검 필요 알림 {len(all_alerts)}개:")
+                for alert in all_alerts:
                     print(f"  - {alert}")
             else:
-                print("📅 오늘 마감인 작업 없음")
+                print("📅 점검 필요한 작업 없음")
             
-            # 6. 검증 결과 + Due Date 알림 슬랙 전송 (파일 업로드 없음)
+            # 6. 검증 결과 + 점검 필요 알림 슬랙 전송 (파일 업로드 없음)
             print("\n6️⃣ 검증 결과 슬랙 전송...")
-            success = self.send_validation_report_to_slack(validation_issues, due_date_alerts, channel_env_var)
+            print(f"🔍 슬랙 전송 직전 디버깅:")
+            print(f"  - validation_issues: {len(validation_issues)}개")
+            print(f"  - all_alerts: {len(all_alerts)}개")
+            print(f"  - all_alerts 내용: {all_alerts}")
+            success = self.send_validation_report_to_slack(validation_issues, all_alerts, channel_env_var)
             
             # 7. 파일 정리
             print("\n7️⃣ 파일 정리...")
@@ -1075,9 +1196,9 @@ class TaskworldSeleniumDownloader:
                 self.driver.quit()
                 print("🔚 브라우저 종료")
 
-    def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None, due_date_alerts=None):
+    def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None, all_alerts=None):
         """
-        슬랙에 리포트 전송 (파일 업로드 + 메시지) - 파일명 표시 및 쓰레드 오류 지원 + Due Date 알림
+        슬랙에 리포트 전송 (파일 업로드 + 메시지) - 파일명 표시 및 쓰레드 오류 지원 + 점검 필요 알림
         """
         if not self.slack_client:
             print("⚠️ 슬랙 클라이언트가 없어 전송을 건너뜁니다.")
@@ -1125,10 +1246,10 @@ class TaskworldSeleniumDownloader:
                         message_text += f"\n- {issue}"
                     message_text += f"\n```"
                 
-                # ⭐ Due Date 알림 추가 (코드 블록으로 표시) ⭐
-                if due_date_alerts:
+                # ⭐ 점검 필요 알림 추가 (코드 블록으로 표시) ⭐
+                if all_alerts:
                     message_text += f"\n```[점검 필요]"
-                    for alert in due_date_alerts:
+                    for alert in all_alerts:
                         message_text += f"\n- {alert}"
                     message_text += f"\n```"
                     
@@ -1566,7 +1687,7 @@ class TaskworldSeleniumDownloader:
 
             # 5. CSV 처리 + 검증 (Due Date 체크 제외)
             print("\n5️⃣ CSV 파일 처리 및 검증...")
-            result_df, removed_count, processed_file, validation_issues, due_date_alerts = self.process_csv(csv_file, include_due_date_check=False)
+            result_df, removed_count, processed_file, validation_issues, all_alerts = self.process_csv(csv_file, include_due_date_check=False)
             
             if result_df is None:
                 error_msg = processed_file
@@ -1584,14 +1705,14 @@ class TaskworldSeleniumDownloader:
                 print("✅ 모든 데이터 검증 통과")
             
             # Due Date 알림 표시
-            if due_date_alerts:
-                print(f"📅 마감일 알림 {len(due_date_alerts)}개:")
-                for alert in due_date_alerts:
+            if all_alerts:
+                print(f"📅 점검 필요 알림 {len(all_alerts)}개:")
+                for alert in all_alerts:
                     print(f"  - {alert}")
             else:
-                print("📅 오늘 마감인 작업 없음")
+                print("📅 점검 필요한 작업 없음")
             
-            # 6. 슬랙 전송 (검증 결과 + Due Date 알림 포함)
+            # 6. 슬랙 전송 (검증 결과 + 점검 필요 알림 포함)
             print("\n6️⃣ 슬랙 리포트 전송...")
             if self.slack_client:
                 # 통계 정보 구성
@@ -1600,7 +1721,7 @@ class TaskworldSeleniumDownloader:
                 print(f"📊 전송할 통계: {stats_info}")
                 print(f"📁 전송할 파일: {processed_file}")
                 
-                success = self.send_to_slack(processed_file, stats_info, None, validation_issues, due_date_alerts)
+                success = self.send_to_slack(processed_file, stats_info, None, validation_issues, all_alerts)
                 if success:
                     print("✅ 슬랙 전송 완료! (파일+메시지 모두 성공)")
                 else:
