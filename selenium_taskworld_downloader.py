@@ -666,11 +666,13 @@ class TaskworldSeleniumDownloader:
             excluded_count = 0
             completed_count = 0
             empty_assigned_to_count = 0
+            empty_time_count = 0
             
             for idx, row in df.iterrows():
                 person_name = row['Tasklist']
                 task_name = row['Task']
                 assigned_to = row['Assigned To']
+                time_spent = row['Time Spent']
                 status = row.get('Status', '')
                 
                 # 제외 대상 건너뛰기 (팀명 등)
@@ -687,6 +689,7 @@ class TaskworldSeleniumDownloader:
                 
                 # Assigned To가 비어있는지 확인
                 is_empty_assigned = pd.isna(assigned_to) or str(assigned_to).strip() == '' or assigned_to == 0
+                is_empty_time = pd.isna(time_spent) or str(time_spent).strip() == '' or time_spent == 0
                 
                 if is_empty_assigned:
                     empty_assigned_to_count += 1
@@ -698,6 +701,18 @@ class TaskworldSeleniumDownloader:
                     alert_msg = f"{person_group}님 : {task_display} (업무 담당자가 비어있음)"
                     assigned_to_alerts.append(alert_msg)
                     print(f"👤 담당자 알림 생성: {alert_msg}")
+                    
+                if is_empty_time:
+                    empty_time_count += 1
+                    person_group = get_name_group(person_name)
+                    task_display = str(task_name)[:30] + "..." if len(str(task_name)) > 30 else str(task_name)
+                    
+                    print(f"⏰ 작업시간 비어있는 Active 작업 발견! {person_name} - {task_name} (Status: {status})")
+                    
+                    alert_msg = f"{person_group}님 : {task_display} (작업시간이 비어있음)"
+                    assigned_to_alerts.append(alert_msg)
+                    print(f"⏰ 작업시간 알림 생성: {alert_msg}")
+                    
             
             print(f"\n📊 Assigned To 체크 최종 결과:")
             print(f"  - 전체 행: {len(df)}개")
@@ -705,7 +720,9 @@ class TaskworldSeleniumDownloader:
             print(f"  - Completed 상태 제외: {completed_count}개")
             print(f"  - Active 작업: {assigned_to_count}개")
             print(f"  - 담당자 비어있는 Active 작업: {empty_assigned_to_count}개")
+            print(f"  - 작업시간 비어있는 Active 작업: {empty_time_count}개")
             print(f"  - 담당자 알림 생성: {len(assigned_to_alerts)}개")
+            print(f"  - 담당자+시간 알림 생성: {len(assigned_to_alerts)}개")
             
             return assigned_to_alerts
             
