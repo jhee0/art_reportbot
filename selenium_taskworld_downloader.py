@@ -32,10 +32,13 @@ WORK_END_TIME_HOUR = 18   # 🔄 업무 종료 시간 (24시간 형식, 기본: 
 # ==========================================
 # 🗂️ 파일 경로 설정
 # ==========================================
-FIRST_TAGS_REQUIRED_SECOND_FILE = "first_tags_required_second.txt"    # 두 번째 태그 필수인 첫 번째 태그들
-FIRST_TAGS_OPTIONAL_SECOND_FILE = "first_tags_optional_second.txt"    # 두 번째 태그 선택적인 첫 번째 태그들
-SECOND_TAGS_FILE = "second_tags.txt"                                   # 두 번째 태그 설정 파일
-EXCLUDE_VALUES_FILE = "exclude_values.txt"                             # 제외할 Tasklist 값들 파일
+
+FIRST_TAGS_REQUIRED_ART_FILE = "first_tags_required_second_art.txt"         # 프로젝트 제외. 실에서 사용하는 두번째 태그 필수인 첫 번째 태그들
+FIRST_TAGS_REQUIRED_PROJECT_FILE = "first_tags_required_second_project.txt" # 프로젝트용 두번째 태그 필수인 첫 번째 태그들
+FIRST_TAGS_OPTIONAL_SECOND_FILE = "first_tags_optional_second.txt"          # 두 번째 태그 선택적인 첫 번째 태그들
+SECOND_TAGS_ART_FILE = "second_tags_art.txt"                                # 프로젝트 제외. 실에서 사용하면서 두번째 태그에 올 수 있는 태그들
+SECOND_TAGS_PROJECT_FILE = "second_tags_project.txt"                        # 프로젝트용 두번째 태그에 올 수 있는 태그들
+EXCLUDE_VALUES_FILE = "exclude_values.txt"                                  # 제외할 Tasklist 값들 파일
 
 # ==========================================
 # 기타 설정
@@ -327,26 +330,43 @@ class TaskworldSeleniumDownloader:
             return False
 
     def load_allowed_tags(self):
-        """허용된 태그 목록 파일에서 로드"""
+        """허용된 태그 목록 파일에서 로드 - 아트/프로젝트 구조"""
         try:
-            # 두 번째 태그 필수인 첫 번째 태그들
+            # 아트 그룹 첫 번째 태그 (두 번째 태그 필수)
             try:
-                with open(FIRST_TAGS_REQUIRED_SECOND_FILE, 'r', encoding='utf-8') as f:
-                    first_tags_required_second = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
-                print(f"✅ 두 번째 태그 필수 첫 번째 태그 로드: {len(first_tags_required_second)}개 ({FIRST_TAGS_REQUIRED_SECOND_FILE})")
+                with open(FIRST_TAGS_REQUIRED_ART_FILE, 'r', encoding='utf-8') as f:
+                    first_tags_required_art = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+                print(f"✅ 아트 그룹 필수 첫 번째 태그 로드: {len(first_tags_required_art)}개 (first_tags_required_second_art.txt)")
             except FileNotFoundError:
-                print(f"❌ 검증을 위한 {FIRST_TAGS_REQUIRED_SECOND_FILE} 파일을 확인해주세요.")
+                print(f"❌ 검증을 위한 first_tags_required_second_art.txt 파일을 확인해주세요.")
                 # 기본 파일 생성
-                default_required = ["cpm", "9up", "a1", "실업무", "c-", "9-"]
-                with open(FIRST_TAGS_REQUIRED_SECOND_FILE, 'w', encoding='utf-8') as f:
-                    f.write("# 두 번째 태그가 반드시 있어야 하는 첫 번째 태그들\n")
+                default_art = ["cpm", "9up", "c-"]
+                with open('first_tags_required_second_art.txt', 'w', encoding='utf-8') as f:
+                    f.write("# 아트 그룹: 두 번째 태그가 반드시 있어야 하는 첫 번째 태그들\n")
                     f.write("# 한 줄에 하나씩, 주석은 #으로 시작\n\n")
-                    for tag in default_required:
+                    for tag in default_art:
                         f.write(f"{tag}\n")
-                print(f"✅ {FIRST_TAGS_REQUIRED_SECOND_FILE} 기본 파일 생성됨")
-                first_tags_required_second = default_required
+                print(f"✅ first_tags_required_second_art.txt 기본 파일 생성됨")
+                first_tags_required_art = default_art
+
+            # 프로젝트 그룹 첫 번째 태그 (두 번째 태그 필수)
+            try:
+                with open('first_tags_required_second_project.txt', 'r', encoding='utf-8') as f:
+                    first_tags_required_project = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+                print(f"✅ 프로젝트 그룹 필수 첫 번째 태그 로드: {len(first_tags_required_project)}개 (first_tags_required_second_project.txt)")
+            except FileNotFoundError:
+                print(f"❌ 검증을 위한 first_tags_required_second_project.txt 파일을 확인해주세요.")
+                # 기본 파일 생성
+                default_project = ["a1", "실업무", "9-"]
+                with open('first_tags_required_second_project.txt', 'w', encoding='utf-8') as f:
+                    f.write("# 프로젝트 그룹: 두 번째 태그가 반드시 있어야 하는 첫 번째 태그들\n")
+                    f.write("# 한 줄에 하나씩, 주석은 #으로 시작\n\n")
+                    for tag in default_project:
+                        f.write(f"{tag}\n")
+                print(f"✅ first_tags_required_second_project.txt 기본 파일 생성됨")
+                first_tags_required_project = default_project
             
-            # 두 번째 태그 선택적인 첫 번째 태그들
+            # 두 번째 태그 선택적인 첫 번째 태그들 (기존과 동일)
             try:
                 with open(FIRST_TAGS_OPTIONAL_SECOND_FILE, 'r', encoding='utf-8') as f:
                     first_tags_optional_second = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
@@ -363,38 +383,62 @@ class TaskworldSeleniumDownloader:
                 print(f"✅ {FIRST_TAGS_OPTIONAL_SECOND_FILE} 기본 파일 생성됨")
                 first_tags_optional_second = default_optional
             
-            # second_tags.txt 파일 읽기 (기존과 동일)
+            # 아트용 두 번째 태그들
             try:
-                with open(SECOND_TAGS_FILE, 'r', encoding='utf-8') as f:
-                    second_tags = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
-                print(f"✅ 두 번째 태그 로드 완료: {len(second_tags)}개 ({SECOND_TAGS_FILE})")
+                with open('second_tags_art.txt', 'r', encoding='utf-8') as f:
+                    second_tags_art = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+                print(f"✅ 아트용 두 번째 태그 로드 완료: {len(second_tags_art)}개 (second_tags_art.txt)")
             except FileNotFoundError:
-                print(f"❌ 검증을 위한 {SECOND_TAGS_FILE} 파일을 확인해주세요.")
+                print(f"❌ 검증을 위한 second_tags_art.txt 파일을 확인해주세요.")
                 # 기본 파일 생성
-                default_second = ["회의", "문서작업", "피드백", "교육"]
-                with open(SECOND_TAGS_FILE, 'w', encoding='utf-8') as f:
-                    f.write("# 두 번째 태그로 허용되는 값들 (완전 일치)\n")
+                default_art_second = ["회의", "문서작업"]
+                with open('second_tags_art.txt', 'w', encoding='utf-8') as f:
+                    f.write("# 아트 그룹용 두 번째 태그로 허용되는 값들 (완전 일치)\n")
                     f.write("# 한 줄에 하나씩, 주석은 #으로 시작\n\n")
-                    for tag in default_second:
+                    for tag in default_art_second:
                         f.write(f"{tag}\n")
-                print(f"✅ {SECOND_TAGS_FILE} 기본 파일 생성됨")
-                second_tags = default_second
+                print(f"✅ second_tags_art.txt 기본 파일 생성됨")
+                second_tags_art = default_art_second
+
+            # 프로젝트용 두 번째 태그들
+            try:
+                with open('second_tags_project.txt', 'r', encoding='utf-8') as f:
+                    second_tags_project = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+                print(f"✅ 프로젝트용 두 번째 태그 로드 완료: {len(second_tags_project)}개 (second_tags_project.txt)")
+            except FileNotFoundError:
+                print(f"❌ 검증을 위한 second_tags_project.txt 파일을 확인해주세요.")
+                # 기본 파일 생성
+                default_project_second = ["피드백", "교육"]
+                with open('second_tags_project.txt', 'w', encoding='utf-8') as f:
+                    f.write("# 프로젝트 그룹용 두 번째 태그로 허용되는 값들 (완전 일치)\n")
+                    f.write("# 한 줄에 하나씩, 주석은 #으로 시작\n\n")
+                    for tag in default_project_second:
+                        f.write(f"{tag}\n")
+                print(f"✅ second_tags_project.txt 기본 파일 생성됨")
+                second_tags_project = default_project_second
             
-            return first_tags_required_second, first_tags_optional_second, second_tags
+            return first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project
             
         except Exception as e:
             print(f"❌ 태그 설정 파일 읽기 실패: {e}")
             exit(1)
+
     
-    def validate_tags(self, df, first_tags_required_second, first_tags_optional_second, second_tags):
+    def validate_tags(self, df, first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project):
         """C열 태그 검증 - 개선된 로직"""
+        
+        first_tags_required_second = first_tags_required_art + first_tags_required_project
+        second_tags = second_tags_art + second_tags_project
+        
         tag_validation_issues = []
         
         try:
             print("🏷️ C열 태그 검증 시작...")
-            print(f"📋 두 번째 태그 필수: {first_tags_required_second}")
+            print(f"📋 아트 그룹 필수: {first_tags_required_art}")
+            print(f"📋 프로젝트 그룹 필수: {first_tags_required_project}")
             print(f"📋 두 번째 태그 선택적: {first_tags_optional_second}")
-            print(f"📋 허용된 두 번째 태그: {second_tags}")
+            print(f"📋 아트용 두 번째 태그: {second_tags_art}")
+            print(f"📋 프로젝트용 두 번째 태그: {second_tags_project}")
             
             # 태그 열이 존재하는지 확인
             if 'Tags' not in df.columns:
@@ -408,6 +452,9 @@ class TaskworldSeleniumDownloader:
             for idx, row in df.iterrows():
                 person_name = row['Tasklist']  # A열 이름
                 tags = row['Tags']  # C열 태그
+                
+                task_name = row['Task']  # B열 작업명
+                task_display = str(task_name)[:20] + "..." if len(str(task_name)) > 20 else str(task_name)
                 
                 # 태그가 비어있거나 NaN인 경우 건너뛰기
                 if pd.isna(tags) or tags == '' or tags == 0:
@@ -449,7 +496,7 @@ class TaskworldSeleniumDownloader:
                 
                 # 첫 번째 태그가 유효하지 않으면 오류
                 if not first_tag_valid:
-                    issue_msg = f"{person_group}님 태그 오류 (첫번째 태그: '{first_tag}')"
+                    issue_msg = f"{person_group}님 태그 오류 : {task_display} (첫번째 태그 '{first_tag}' 불가능)"
                     if issue_msg not in tag_validation_issues:
                         tag_validation_issues.append(issue_msg)
                     continue  # 첫 번째 태그가 틀리면 두 번째는 확인하지 않음
@@ -458,13 +505,13 @@ class TaskworldSeleniumDownloader:
                 if first_tag_category == 'required':
                     # 두 번째 태그 필수인 경우
                     if len(tag_list) < 2:
-                        issue_msg = f"{person_group}님 태그 오류 (두번째 태그 누락, '{first_tag}'는 두번째 태그 필수)"
+                        issue_msg = f"{person_group}님 태그 오류 : {task_display} (두번째 태그 누락, '{first_tag}'는 필수)"
                         if issue_msg not in tag_validation_issues:
                             tag_validation_issues.append(issue_msg)
                     else:
                         second_tag = tag_list[1]
                         if second_tag not in second_tags:
-                            issue_msg = f"{person_group}님 태그 오류 (두번째 태그: '{second_tag}')"
+                            issue_msg = f"{person_group}님 태그 오류 : {task_display} (두번째 태그 '{second_tag}' 불가능)"
                             if issue_msg not in tag_validation_issues:
                                 tag_validation_issues.append(issue_msg)
                 
@@ -473,7 +520,7 @@ class TaskworldSeleniumDownloader:
                     if len(tag_list) >= 2:
                         second_tag = tag_list[1]
                         if second_tag not in second_tags:
-                            issue_msg = f"{person_group}님 태그 오류 (두번째 태그: '{second_tag}')"
+                            issue_msg = f"{person_group}님 태그 오류 : {task_display} (두번째 태그 '{second_tag}' 불가능)"
                             if issue_msg not in tag_validation_issues:
                                 tag_validation_issues.append(issue_msg)
             
@@ -775,13 +822,13 @@ class TaskworldSeleniumDownloader:
             print(f"🔍 최종 컬럼명: {list(df.columns)}")
             
             # 1. 태그 설정 로드
-            first_tags_required_second, first_tags_optional_second, second_tags = self.load_allowed_tags()
+            first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project = self.load_allowed_tags()
             
             # 2. 시간 검증 (기존 로직) - 4열 기준으로
             validation_issues = self._validate_time_totals(df, min_hours)
             
             # 3. 태그 검증 (개선된 로직) - 원본 데이터 사용
-            tag_issues = self.validate_tags(df, first_tags_required_second, first_tags_optional_second, second_tags)
+            tag_issues = self.validate_tags(df, first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project)
             
             # 4. Due Date 체크 + Assigned To 체크 (검증 모드에서만 실행)
             due_date_alerts = []
