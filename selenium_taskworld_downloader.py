@@ -807,9 +807,14 @@ class TaskworldSeleniumDownloader:
                               'Subtask', 'Subtask Reference ID']
             
             # 실제 컬럼 수에 맞게 조정
-            if len(df.columns) >= len(original_columns):
+            if len(df.columns) > len(original_columns):
+            # 부족한 컬럼명 추가
+                for i in range(len(original_columns), len(df.columns)):
+                    original_columns.append(f'Col_{i+1}')
+
+                # 컬럼명 설정
                 df.columns = original_columns[:len(df.columns)]
-                print(f"🔍 컬럼 설정 완료 - 19열 형식 사용")
+                print(f"🔍 컬럼 설정 완료")
             else:
                 # 필수 컬럼만 설정
                 essential_columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
