@@ -623,6 +623,7 @@ class TaskworldSeleniumDownloader:
             today_due_count = 0
             excluded_count = 0
             empty_due_date_count = 0
+            completed_count = 0
 
             
             for idx, row in df.iterrows():
@@ -636,6 +637,11 @@ class TaskworldSeleniumDownloader:
                     excluded_count += 1
                     continue
                 
+                # Completed 상태 제외 (Active만 체크)
+                if status == 'Completed':
+                    completed_count += 1
+                    continue
+        
                 # Due Date 파싱
                 debug_info = f"행 {idx+1} ({person_name})"
                 due_date = parse_due_date(due_date_str, debug_info)
@@ -668,6 +674,7 @@ class TaskworldSeleniumDownloader:
             print(f"  - 전체 행: {len(df)}개")
             print(f"  - 제외된 행 (팀명 등): {excluded_count}개")
             print(f"  - Due Date 없는 행: {empty_due_date_count}개")
+            print(f"  - Completed 상태 제외: {completed_count}개")
             print(f"  - 오늘 마감 Active 작업: {today_due_count}개")
             print(f"  - 알림 생성: {len(due_date_alerts)}개")
             
