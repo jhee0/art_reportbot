@@ -623,7 +623,7 @@ class TaskworldSeleniumDownloader:
             today_due_count = 0
             excluded_count = 0
             empty_due_date_count = 0
-            completed_count = 0
+
             
             for idx, row in df.iterrows():
                 person_name = row['Tasklist']
@@ -634,11 +634,6 @@ class TaskworldSeleniumDownloader:
                 # 제외 대상 건너뛰기 (팀명 등)
                 if person_name in exclude_values:
                     excluded_count += 1
-                    continue
-                
-                # Completed 상태 제외 (Active만 알림)
-                if status == 'Completed':
-                    completed_count += 1
                     continue
                 
                 # Due Date 파싱
@@ -672,9 +667,7 @@ class TaskworldSeleniumDownloader:
             print(f"\n📊 Due Date 체크 최종 결과:")
             print(f"  - 전체 행: {len(df)}개")
             print(f"  - 제외된 행 (팀명 등): {excluded_count}개")
-            print(f"  - Completed 상태 제외: {completed_count}개")
             print(f"  - Due Date 없는 행: {empty_due_date_count}개")
-            print(f"  - Due Date 있는 Active 작업: {due_date_count}개")
             print(f"  - 오늘 마감 Active 작업: {today_due_count}개")
             print(f"  - 알림 생성: {len(due_date_alerts)}개")
             
@@ -711,7 +704,6 @@ class TaskworldSeleniumDownloader:
             # 각 행별로 Assigned To 체크
             assigned_to_count = 0
             excluded_count = 0
-            completed_count = 0
             empty_assigned_to_count = 0
             empty_time_count = 0
             
@@ -727,11 +719,6 @@ class TaskworldSeleniumDownloader:
                     excluded_count += 1
                     continue
                 
-                # Completed 상태 제외 (Active만 체크)
-                if status == 'Completed':
-                    completed_count += 1
-                    continue
-                
                 assigned_to_count += 1
                 
                 # Assigned To가 비어있는지 확인
@@ -743,7 +730,7 @@ class TaskworldSeleniumDownloader:
                     person_group = get_name_group(person_name)
                     task_display = str(task_name)[:30] + "..." if len(str(task_name)) > 30 else str(task_name)
                     
-                    print(f"👤 담당자 비어있는 Active 작업 발견! {person_name} - {task_name} (Status: {status})")
+                    print(f"👤 담당자 비어있는 작업 발견! {person_name} - {task_name} (Status: {status})")
                     
                     alert_msg = f"{person_group}님 : {task_display} (업무 담당자가 비어있음)"
                     assigned_to_alerts.append(alert_msg)
@@ -754,7 +741,7 @@ class TaskworldSeleniumDownloader:
                     person_group = get_name_group(person_name)
                     task_display = str(task_name)[:30] + "..." if len(str(task_name)) > 30 else str(task_name)
                     
-                    print(f"⏰ 작업시간 비어있는 Active 작업 발견! {person_name} - {task_name} (Status: {status})")
+                    print(f"⏰ 작업시간 비어있는 작업 발견! {person_name} - {task_name} (Status: {status})")
                     
                     alert_msg = f"{person_group}님 : {task_display} (작업시간이 비어있음)"
                     assigned_to_alerts.append(alert_msg)
@@ -764,8 +751,6 @@ class TaskworldSeleniumDownloader:
             print(f"\n📊 Assigned To 체크 최종 결과:")
             print(f"  - 전체 행: {len(df)}개")
             print(f"  - 제외된 행 (팀명 등): {excluded_count}개")
-            print(f"  - Completed 상태 제외: {completed_count}개")
-            print(f"  - Active 작업: {assigned_to_count}개")
             print(f"  - 담당자 비어있는 Active 작업: {empty_assigned_to_count}개")
             print(f"  - 작업시간 비어있는 Active 작업: {empty_time_count}개")
             print(f"  - 담당자 알림 생성: {len(assigned_to_alerts)}개")
