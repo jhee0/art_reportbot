@@ -1048,16 +1048,16 @@ class TaskworldSeleniumDownloader:
             # 메시지 구성
             if not validation_issues and not all_alerts:
                 # 모든 검증 성공 + 점검 필요 알림 없음
-                message_text = "[태스크월드 검토] 오류 없음 👍\n"
+                message_text = f"[태스크월드 검토] 오류 없음 👍 ({WORKSPACE_NAME})\n"
             elif not validation_issues and all_alerts:
                 # 검증 성공 + 점검 필요 알림 있음
-                message_text = "[태스크월드 검토] 오류 없음 👍\n"
+                message_text = f"[태스크월드 검토] 오류 없음 👍 ({WORKSPACE_NAME})\n"
             else:
                 # 검증 실패 시 오류 인원 추출
                 mentioned_people = self._extract_people_from_issues(validation_issues)
                 
                 # 메시지 시작
-                message_text = "[태스크월드 검토] 오류 발견 ☠️\n"
+                message_text = f"[태스크월드 검토] 오류 발견 ☠️ ({WORKSPACE_NAME})\n"
                 
                 # 확인 필요한 사람들 표시
                 if mentioned_people:
