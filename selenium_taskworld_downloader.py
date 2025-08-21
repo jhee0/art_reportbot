@@ -43,7 +43,7 @@ EXCLUDE_VALUES_FILE = "exclude_values.txt"                                  # �
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = False  # 브라우저 창 보기/숨기기 (True: 숨김, False: 보기)
+DEFAULT_HEADLESS = True  # 브라우저 창 보기/숨기기 (True: 숨김, False: 보기)
 
 logger = logging.getLogger(__name__)
 
