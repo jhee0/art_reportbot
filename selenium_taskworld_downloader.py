@@ -43,7 +43,7 @@ EXCLUDE_VALUES_FILE = "exclude_values.txt"                                  # �
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True  # 브라우저 창 보기/숨기기 (True: 숨김, False: 보기)
+DEFAULT_HEADLESS = False  # 브라우저 창 보기/숨기기 (True: 숨김, False: 보기)
 
 logger = logging.getLogger(__name__)
 
@@ -247,88 +247,385 @@ class TaskworldSeleniumDownloader:
             print(f"📄 현재 URL: {self.driver.current_url}")
             return False
     
+    
     def navigate_to_workspace(self, workspace_name=WORKSPACE_NAME):
-        """특정 워크스페이스로 이동"""
+        """스마트 대기 시스템이 적용된 워크스페이스 이동"""
         try:
-            print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
+            print(f"🔂 워크스페이스 '{workspace_name}' 찾기 시작...")
             print(f"📄 현재 URL: {self.driver.current_url}")
             
-            time.sleep(3)  # 페이지 로딩 대기
+            max_attempts = 3
             
-            # 1단계: URL을 직접 수정해서 프로젝트 페이지로 이동
-            print("🔗 URL을 직접 수정해서 프로젝트 페이지로 이동...")
+            for attempt in range(1, max_attempts + 1):
+                print(f"\n🔄 시도 {attempt}/{max_attempts}")
+                
+                # 1단계: 페이지 완전 로딩 대기 (스마트 대기)
+                if not self._wait_for_page_ready():
+                    print(f"❌ 시도 {attempt}: 페이지 로딩 대기 실패")
+                    continue
+                
+                # 2단계: 프로젝트 페이지로 이동 (다중 전략)
+                if not self._navigate_to_projects_with_smart_wait():
+                    print(f"❌ 시도 {attempt}: 프로젝트 페이지 이동 실패")
+                    continue
+                
+                # 2.5단계: 전체 프로젝트 탭 클릭
+                if not self._click_all_projects_tab():
+                    print(f"⚠️ 시도 {attempt}: 전체 프로젝트 탭 클릭 실패, 현재 상태로 진행...")
+                
+                # 3단계: 워크스페이스 목록 로딩 대기 (스마트 대기)
+                if not self._wait_for_workspace_list_loaded():
+                    print(f"❌ 시도 {attempt}: 워크스페이스 목록 로딩 실패")
+                    continue
+                
+                # 4단계: 워크스페이스 검색 (부분 매치 포함)
+                if self._find_workspace_with_smart_search(workspace_name):
+                    print(f"✅ 시도 {attempt}: 워크스페이스 접속 성공!")
+                    return True
+                
+                print(f"❌ 시도 {attempt}: 워크스페이스 찾기 실패")
+                if attempt < max_attempts:
+                    print("🔄 페이지 새로고침 후 재시도...")
+                    self.driver.refresh()
+                    time.sleep(2)  # 최소한의 대기만
+            
+            print("❌ 모든 시도 실패")
+            return False
+            
+        except Exception as e:
+            print(f"❌ 워크스페이스 접속 중 오류: {e}")
+            return False
+
+    def _wait_for_page_ready(self, timeout=20):
+        """페이지가 완전히 준비될 때까지 스마트 대기"""
+        try:
+            print("⏳ 페이지 완전 로딩 대기...")
+            
+            # 1. DOM 로딩 완료 대기
+            WebDriverWait(self.driver, timeout).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
+            print("✅ DOM 로딩 완료")
+            
+            # 2. jQuery 로딩 완료 대기 (있는 경우)
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda driver: driver.execute_script("return typeof jQuery !== 'undefined' && jQuery.active == 0")
+                )
+                print("✅ jQuery 로딩 완료")
+            except:
+                print("ℹ️ jQuery 없음 또는 이미 완료")
+            
+            # 3. 기본 body 요소 존재 확인
+            WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            print("✅ Body 요소 로딩 완료")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ 페이지 로딩 대기 실패: {e}")
+            return False
+
+    def _navigate_to_projects_with_smart_wait(self):
+        """스마트 대기를 적용한 프로젝트 페이지 이동"""
+        try:
             current_url = self.driver.current_url
             
-            # home을 projects로 교체
+            # 방법 1: URL 직접 수정
             if "#/home" in current_url:
                 project_url = current_url.replace("#/home", "#/projects")
-                print(f"📄 이동할 URL: {project_url}")
+                print(f"🔗 URL 직접 수정: {project_url}")
                 self.driver.get(project_url)
-                time.sleep(3)  # 프로젝트 페이지 로딩 대기
-                print("✅ 프로젝트 페이지로 이동 완료")
-            else:
-                print("⚠️ URL에 #/home이 없어서 직접 프로젝트 페이지 구성을 시도합니다...")
-                # 기본 URL 구조에 #/projects 추가
-                if "#/" not in current_url:
-                    project_url = current_url + "#/projects"
-                else:
-                    base_url = current_url.split("#/")[0]
-                    project_url = base_url + "#/projects"
                 
-                print(f"📄 구성된 URL: {project_url}")
-                self.driver.get(project_url)
-                time.sleep(3)
+                # 프로젝트 페이지 로딩 확인
+                try:
+                    WebDriverWait(self.driver, 15).until(
+                        lambda driver: "#/projects" in driver.current_url
+                    )
+                    print("✅ URL 직접 수정 성공")
+                    return True
+                except:
+                    print("❌ URL 직접 수정 실패")
             
-            # 2단계: 워크스페이스 찾기
-            print(f"📂 워크스페이스 '{workspace_name}' 찾는 중...")
-            workspace_selectors = [
+            # 방법 2: 네비게이션 메뉴 찾기
+            print("🔍 네비게이션 메뉴로 프로젝트 페이지 찾기...")
+            nav_selectors = [
+                "//a[contains(@href, 'projects')]",
+                "//button[contains(text(), 'Projects')]",
+                "//div[contains(text(), 'Projects')]",
+                "//nav//a[contains(text(), 'Project')]",
+                "//*[@data-testid='projects-nav']"
+            ]
+            
+            for selector in nav_selectors:
+                try:
+                    nav_element = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    nav_element.click()
+                    print(f"✅ 네비게이션 클릭 성공: {selector}")
+                    
+                    # 페이지 이동 확인
+                    WebDriverWait(self.driver, 10).until(
+                        lambda driver: "projects" in driver.current_url.lower() or
+                                     len(driver.find_elements(By.XPATH, "//*[contains(text(), 'workspace') or contains(text(), 'project')]")) > 0
+                    )
+                    return True
+                    
+                except:
+                    continue
+            
+            # 방법 3: 강제 URL 구성
+            print("🔧 강제 URL 구성 시도...")
+            base_url = current_url.split("#/")[0] if "#/" in current_url else current_url
+            project_url = base_url + "#/projects"
+            self.driver.get(project_url)
+            
+            # 로딩 확인
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    lambda driver: len(driver.find_elements(By.TAG_NAME, "a")) > 5  # 기본적인 링크들이 로드됐는지
+                )
+                print("✅ 강제 URL 구성 성공")
+                return True
+            except:
+                print("❌ 강제 URL 구성 실패")
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ 프로젝트 페이지 이동 실패: {e}")
+            return False
+
+    def _click_all_projects_tab(self):
+        """전체 프로젝트 탭 클릭"""
+        try:
+            print("📑 전체 프로젝트 탭 찾는 중...")
+            
+            # 전체 프로젝트 탭 셀렉터들
+            tab_selectors = [
+                "//button[contains(text(), '전체 프로젝트')]",
+                "//a[contains(text(), '전체 프로젝트')]",
+                "//div[contains(text(), '전체 프로젝트')]",
+                "//span[contains(text(), '전체 프로젝트')]",
+                "//*[contains(text(), '전체') and contains(text(), '프로젝트')]",
+                "//button[contains(text(), 'All Projects')]",
+                "//a[contains(text(), 'All Projects')]",
+                "//*[@data-tab='all' or @data-tab='active']",
+                "//*[contains(@class, 'tab') and contains(text(), '전체')]",
+                "//li[contains(text(), '전체 프로젝트')]",
+                "//*[@role='tab' and contains(text(), '전체')]",
+                "//nav//*[contains(text(), '전체 프로젝트')]"
+            ]
+            
+            for selector in tab_selectors:
+                try:
+                    tab_element = WebDriverWait(self.driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    print(f"✅ 전체 프로젝트 탭 발견: {selector}")
+                    
+                    # 클릭 시도
+                    try:
+                        tab_element.click()
+                        print("✅ 전체 프로젝트 탭 일반 클릭 완료")
+                    except:
+                        # JavaScript 클릭 시도
+                        self.driver.execute_script("arguments[0].click();", tab_element)
+                        print("✅ 전체 프로젝트 탭 JavaScript 클릭 완료")
+                    
+                    # 탭 전환 후 로딩 대기
+                    WebDriverWait(self.driver, 5).until(
+                        lambda driver: len(driver.find_elements(By.XPATH, "//a | //div")) > 5
+                    )
+                    print("✅ 탭 전환 후 로딩 완료")
+                    return True
+                    
+                except:
+                    continue
+            
+            print("❌ 전체 프로젝트 탭을 찾을 수 없음")
+            # 디버깅: 현재 페이지의 탭 관련 요소들 출력
+            try:
+                tab_elements = self.driver.find_elements(By.XPATH, "//*[contains(@class, 'tab') or contains(text(), '프로젝트') or contains(text(), 'Project')]")
+                print("🔍 발견된 탭 관련 요소들:")
+                for i, elem in enumerate(tab_elements[:5]):
+                    try:
+                        print(f"  {i+1}: {elem.text.strip()}")
+                    except:
+                        print(f"  {i+1}: [텍스트 읽기 실패]")
+            except:
+                print("  탭 요소 디버깅 실패")
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ 전체 프로젝트 탭 클릭 실패: {e}")
+            return False
+
+    def _wait_for_workspace_list_loaded(self, timeout=20):
+        """워크스페이스 목록이 실제로 로딩될 때까지 스마트 대기"""
+        try:
+            print("⏳ 워크스페이스 목록 로딩 대기...")
+            
+            # 1. 로딩 스피너가 사라질 때까지 대기
+            try:
+                WebDriverWait(self.driver, 10).until_not(
+                    EC.presence_of_element_located((By.XPATH, "//*[contains(@class, 'loading') or contains(@class, 'spinner')]"))
+                )
+                print("✅ 로딩 스피너 사라짐")
+            except:
+                print("ℹ️ 로딩 스피너 없음 또는 이미 사라짐")
+            
+            # 2. 워크스페이스/프로젝트 관련 요소가 나타날 때까지 대기
+            workspace_indicators = [
+                "//*[contains(text(), 'workspace')]",
+                "//*[contains(text(), 'project')]",
+                "//a[contains(@href, 'project')]",
+                "//*[@class*='workspace']",
+                "//*[@class*='project']"
+            ]
+            
+            for indicator in workspace_indicators:
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, indicator))
+                    )
+                    print(f"✅ 워크스페이스 영역 감지: {indicator}")
+                    break
+                except:
+                    continue
+            
+            # 3. 실제 클릭 가능한 링크들이 최소 개수 이상 로딩될 때까지 대기
+            WebDriverWait(self.driver, timeout).until(
+                lambda driver: len(driver.find_elements(By.XPATH, "//a[@href]")) >= 3
+            )
+            print("✅ 충분한 링크 요소 로딩 완료")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ 워크스페이스 목록 로딩 대기 실패: {e}")
+            return False
+
+    def _find_workspace_with_smart_search(self, workspace_name):
+        """정확 매치만 사용하는 안전한 워크스페이스 검색"""
+        try:
+            print(f"🔍 워크스페이스 정확 검색: '{workspace_name}'")
+            
+            # 정확한 매치만 시도 (contains 사용)
+            exact_selectors = [
                 f"//a[contains(text(), '{workspace_name}')]",
                 f"//div[contains(text(), '{workspace_name}')]",
                 f"//span[contains(text(), '{workspace_name}')]",
                 f"//button[contains(text(), '{workspace_name}')]",
+                f"//h1[contains(text(), '{workspace_name}')]",
+                f"//h2[contains(text(), '{workspace_name}')]",
+                f"//h3[contains(text(), '{workspace_name}')]",
+                f"//td[contains(text(), '{workspace_name}')]",
+                f"//li[contains(text(), '{workspace_name}')]",
+                f"//*[@title='{workspace_name}']",
+                f"//*[contains(@aria-label, '{workspace_name}')]",
+                f"//*[text()='{workspace_name}']",
                 f"//*[contains(text(), '{workspace_name}')]"
             ]
             
-            workspace_link = None
-            for selector in workspace_selectors:
+            workspace_link = self._try_selectors_with_smart_wait(exact_selectors, "정확 매치")
+            if workspace_link:
+                # 클릭 전 텍스트 확인으로 이중 검증
                 try:
-                    print(f"🔍 워크스페이스 선택자 시도: {selector}")
-                    workspace_link = self.wait.until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    print(f"✅ 워크스페이스 링크 발견: {selector}")
-                    break
+                    element_text = workspace_link.text.strip()
+                    if workspace_name in element_text:
+                        print(f"✅ 워크스페이스 매치 확인: '{element_text}'")
+                        return self._click_workspace_safely(workspace_link)
+                    else:
+                        print(f"❌ 텍스트 불일치: 예상 '{workspace_name}', 실제 '{element_text}'")
                 except:
-                    print(f"❌ 워크스페이스 선택자 실패: {selector}")
-                    continue
+                    print("❌ 요소 텍스트 확인 실패")
             
-            if not workspace_link:
-                print("❌ 워크스페이스 링크를 찾을 수 없음")
-                print("📋 페이지의 모든 텍스트 확인:")
-                try:
-                    page_text = self.driver.find_element(By.TAG_NAME, "body").text
-                    print(page_text[:500] + "..." if len(page_text) > 500 else page_text)
-                except:
-                    print("페이지 텍스트 가져오기 실패")
-                return False
+            # 실패 시 디버깅 정보 출력
+            print("❌ 정확 매치 실패. 사용 가능한 워크스페이스 목록:")
+            try:
+                # 워크스페이스로 보이는 모든 링크와 텍스트 수집
+                all_elements = self.driver.find_elements(By.XPATH, "//a | //div | //span")
+                workspace_candidates = []
+                
+                for element in all_elements:
+                    try:
+                        text = element.text.strip()
+                        if text and len(text) > 5:  # 의미 있는 텍스트만
+                            # 워크스페이스 이름 패턴 확인
+                            if any(keyword in text for keyword in ["아트실", "팀", "프로젝트", "주기", "2025", "2024"]):
+                                workspace_candidates.append(text)
+                    except:
+                        continue
+                
+                # 중복 제거 후 출력
+                unique_candidates = list(set(workspace_candidates))[:15]  # 최대 15개
+                for i, candidate in enumerate(unique_candidates):
+                    print(f"  {i+1}: {candidate}")
+                    
+            except Exception as debug_error:
+                print(f"  디버깅 정보 수집 실패: {debug_error}")
             
-            # 워크스페이스 클릭
+            return False
+            
+        except Exception as e:
+            print(f"❌ 워크스페이스 검색 실패: {e}")
+            return False
+
+    def _try_selectors_with_smart_wait(self, selectors, search_type):
+        """스마트 대기를 적용한 셀렉터 시도"""
+        print(f"🔍 {search_type} 시도...")
+        
+        for selector in selectors:
+            try:
+                # 요소가 존재하고 클릭 가능할 때까지 대기
+                element = WebDriverWait(self.driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, selector))
+                )
+                print(f"✅ {search_type} 성공: {selector}")
+                return element
+            except:
+                continue
+        
+        print(f"❌ {search_type} 실패")
+        return None
+
+    def _click_workspace_safely(self, workspace_element):
+        """안전한 워크스페이스 클릭"""
+        try:
             print("🖱️ 워크스페이스 클릭...")
-            workspace_link.click()
             
-            # 워크스페이스 로딩 대기
-            print("⏳ 워크스페이스 로딩 대기...")
-            time.sleep(5)
+            # 1차: 일반 클릭
+            try:
+                workspace_element.click()
+                print("✅ 일반 클릭 성공")
+            except:
+                # 2차: JavaScript 클릭
+                print("🔧 JavaScript 클릭 시도...")
+                self.driver.execute_script("arguments[0].click();", workspace_element)
+                print("✅ JavaScript 클릭 성공")
             
-            print(f"📄 워크스페이스 접속 후 URL: {self.driver.current_url}")
-            print(f"✅ '{workspace_name}' 워크스페이스 접속 완료")
+            # 워크스페이스 로딩 확인 (스마트 대기)
+            WebDriverWait(self.driver, 15).until(
+                lambda driver: driver.current_url != self.driver.current_url or
+                              len(driver.find_elements(By.XPATH, "//*[contains(@class, 'task') or contains(@class, 'project')]")) > 0
+            )
+            
+            print(f"✅ 워크스페이스 접속 완료: {self.driver.current_url}")
             return True
             
         except Exception as e:
-            print(f"❌ 워크스페이스 접속 실패: {e}")
-            print(f"📄 현재 URL: {self.driver.current_url}")
+            print(f"❌ 워크스페이스 클릭 실패: {e}")
             return False
+        
+    
+    
 
+    
     def load_allowed_tags(self):
         """허용된 태그 목록 파일에서 로드 - 아트/프로젝트 구조"""
         try:
@@ -1048,16 +1345,16 @@ class TaskworldSeleniumDownloader:
             # 메시지 구성
             if not validation_issues and not all_alerts:
                 # 모든 검증 성공 + 점검 필요 알림 없음
-                message_text = f"[태스크월드 검토] 오류 없음 👍 ({WORKSPACE_NAME})\n"
+                message_text = f"[태스크월드 검토] {WORKSPACE_NAME} 오류 없음 👍\n"
             elif not validation_issues and all_alerts:
                 # 검증 성공 + 점검 필요 알림 있음
-                message_text = f"[태스크월드 검토] 오류 없음 👍 ({WORKSPACE_NAME})\n"
+                message_text = f"[태스크월드 검토] {WORKSPACE_NAME} 오류 없음 👍\n"
             else:
                 # 검증 실패 시 오류 인원 추출
                 mentioned_people = self._extract_people_from_issues(validation_issues)
                 
                 # 메시지 시작
-                message_text = f"[태스크월드 검토] 오류 발견 ☠️ ({WORKSPACE_NAME})\n"
+                message_text = f"[태스크월드 검토] {WORKSPACE_NAME} 오류 발견 ☠️\n"
                 
                 # 확인 필요한 사람들 표시
                 if mentioned_people:
