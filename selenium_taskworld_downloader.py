@@ -1012,7 +1012,7 @@ class TaskworldSeleniumDownloader:
             if error_message:
                 message_text += f"\n파일 업로드 실패: `{error_message}`"
             else:
-                message_text += f"\n파일 업로드 성공: `{OUTPUT_FILENAME}`"
+                message_text += f"\n✅ 파일 업로드 성공: `{OUTPUT_FILENAME}`"
 
                 if validation_issues:
                     message_text += f"\n```"
@@ -1323,6 +1323,131 @@ class TaskworldSeleniumDownloader:
         except Exception as e:
             print(f"❌ CSV 내보내기 실패: {e}")
             return None
+
+    def run_complete_automation(self, email, password, workspace_name=WORKSPACE_NAME):
+        """완전 자동화 프로세스 실행: 다운로드 → 처리 → 슬랙 전송"""
+        try:
+            print("🚀 완전 자동화 프로세스 시작")
+            print("=" * 60)
+            
+            # 1. 드라이버 설정
+            print("1️⃣ 드라이버 설정...")
+            if not self.setup_driver():
+                error_msg = "브라우저 드라이버 설정 실패"
+                self.send_to_slack(None, None, error_msg)
+                return None
+            
+            # 2. 로그인
+            print("\n2️⃣ 로그인...")
+            if not self.login_to_taskworld(email, password):
+                error_msg = "태스크월드 로그인 실패"
+                self.send_to_slack(None, None, error_msg)
+                return None
+            
+            # 3. 워크스페이스 이동
+            print("\n3️⃣ 워크스페이스 이동...")
+            if not self.navigate_to_workspace(workspace_name):
+                error_msg = f"워크스페이스 '{workspace_name}' 접속 실패"
+                self.send_to_slack(None, None, error_msg)
+                return None
+            
+            # 4. CSV 내보내기
+            print("\n4️⃣ CSV 내보내기...")
+            csv_file = self.export_csv()
+            
+            if not csv_file:
+                error_msg = "CSV 다운로드 실패"
+                self.send_to_slack(None, None, error_msg)
+                return None
+            
+            print(f"\n✅ 태스크월드 CSV 다운로드 완료: {csv_file}")
+
+            # 5. CSV 처리 + 검증 (Due Date 체크 제외)
+            print("\n5️⃣ CSV 파일 처리 및 검증...")
+            result_df, removed_count, processed_file, validation_issues = self.process_csv(csv_file)
+            
+            if result_df is None:
+                error_msg = processed_file
+                self.send_to_slack(None, None, error_msg)
+                return None
+            
+            print(f"✅ CSV 처리 완료: {processed_file}")
+            
+            # 검증 결과 표시
+            if validation_issues:
+                print(f"⚠️ 검증 이슈 {len(validation_issues)}개 발견:")
+                for issue in validation_issues:
+                    print(f"  - {issue}")
+            else:
+                print("✅ 모든 데이터 검증 통과")
+            
+            
+            # 6. 슬랙 전송 (검증 결과 + 점검 필요 알림 포함)
+            print("\n6️⃣ 슬랙 리포트 전송...")
+            if self.slack_client:
+                # 통계 정보 구성
+                stats_info = f"총 {len(result_df) + (removed_count or 0)}행 → 필터링 {removed_count or 0}행 → 최종 {len(result_df)}행"
+                
+                print(f"📊 전송할 통계: {stats_info}")
+                print(f"📁 전송할 파일: {processed_file}")
+                
+                success = self.send_to_slack(processed_file, stats_info, None, validation_issues)
+                if success:
+                    print("✅ 슬랙 전송 완료! (파일+메시지 모두 성공)")
+                else:
+                    print("❌ 슬랙 전송 실패")
+                    # 실패해도 파일은 생성되었으므로 프로세스는 성공으로 간주
+                    print("💡 파일은 생성되었으니 수동으로 슬랙에 업로드 가능")
+            else:
+                print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
+            
+            # 7. 파일 정리
+            print("\n7️⃣ 파일 정리...")
+            try:
+                # 원본 파일 삭제 (처리된 파일만 남김)
+                if os.path.exists(csv_file):
+                    os.remove(csv_file)
+                    print(f"🗑️ 원본 파일 삭제: {os.path.basename(csv_file)}")
+                
+                # Downloads 폴더의 export-projects 관련 파일들도 정리
+                downloads_pattern = os.path.expanduser("~/Downloads/export-projects*.csv")
+                downloads_files = glob.glob(downloads_pattern)
+                for file in downloads_files:
+                    try:
+                        os.remove(file)
+                        print(f"🗑️ Downloads 파일 삭제: {os.path.basename(file)}")
+                    except:
+                        pass
+                
+                print(f"📁 최종 파일: {processed_file}")
+                print(f"📂 파일 위치: {os.path.abspath(processed_file)}")
+                if os.path.exists(processed_file):
+                    file_size = os.path.getsize(processed_file)
+                    print(f"📊 파일 정보: {file_size} 바이트")
+                    print(f"💡 슬랙 업로드가 실패했다면 위 파일을 수동으로 업로드하세요.")
+                print("✅ 파일 정리 완료 - 처리된 파일만 보존")
+            except Exception as e:
+                print(f"⚠️ 파일 정리 실패: {e}")
+            
+            print(f"\n🎉 완전 자동화 프로세스 완료!")
+            print(f"📁 최종 파일: {processed_file}")
+            return processed_file
+                
+        except Exception as e:
+            error_msg = f"완전 자동화 프로세스 실패: {str(e)}"
+            print(f"\n❌ {error_msg}")
+            self.send_to_slack(None, None, error_msg)
+            return None
+            
+        finally:
+            # 브라우저 종료 (headless=False일 때는 5초 대기)
+            if not self.headless:
+                print("\n⏳ 브라우저 확인을 위해 5초 후 종료...")
+                time.sleep(5)
+            
+            if self.driver:
+                self.driver.quit()
+                print("🔚 브라우저 종료")
             
 
 if __name__ == "__main__":
