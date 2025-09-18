@@ -4,6 +4,7 @@ on:
   schedule:
     # 한국시간 평일 오후 5시 30분 (UTC 08:30)  
     - cron: '30 8 * * 1-5'  # 월-금 UTC 08:30 = 월-금 KST 17:30
+    - cron: '00 11 * * 1-5'  # 월-금 UTC 08:30 = 월-금 KST 20:00
   
   # 수동 실행도 가능하게
   workflow_dispatch:
