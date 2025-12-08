@@ -600,9 +600,12 @@ class TaskworldSeleniumDownloader:
                 tags = row['Tags']
                 task_name = row['Task']
                 task_display = str(task_name)[:20] + "..." if len(str(task_name)) > 20 else str(task_name)
-                
-                # 태그가 비어있거나 NaN인 경우 건너뛰기
+                    
+                # 태그가 비어있거나 NaN인 경우 오류 추가
                 if pd.isna(tags) or tags == '' or tags == 0:
+                    issue_msg = f"{person_group}님 태그 오류 : {task_display} (태그 없음)"
+                    if issue_msg not in tag_validation_issues:
+                        tag_validation_issues.append(issue_msg)
                     continue
                 
                 # 이름 그룹핑 (기존 로직과 동일)
