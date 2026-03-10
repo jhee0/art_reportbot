@@ -25,10 +25,8 @@ jobs:
       run: |
         pip install selenium pandas python-dotenv slack-sdk
         
-    - name: Install Chrome
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
+    - name: Setup Chrome
+      uses: browser-actions/setup-chrome@v1
         
     - name: Download from Taskworld
       env:
