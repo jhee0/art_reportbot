@@ -41,7 +41,7 @@ EXCLUDE_VALUES_FILE = "exclude_values.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True
+DEFAULT_HEADLESS = False
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +215,7 @@ class TaskworldSeleniumDownloader:
                     continue
                 
                 if not self._click_all_projects_tab():
-                    print(f"⚠️ 시도 {attempt}: 전체 프로젝트 탭 클릭 실패, 현재 상태로 진행...")
+                    print(f"⚠️ 시도 {attempt}: '내가 속한 프로젝트' 탭 클릭 실패 - 보관된 프로젝트에서 검색될 수 있음!")
                 
                 if not self._wait_for_workspace_list_loaded():
                     print(f"❌ 시도 {attempt}: 워크스페이스 목록 로딩 실패")
@@ -330,46 +330,47 @@ class TaskworldSeleniumDownloader:
             return False
 
     def _click_all_projects_tab(self):
-        """전체 프로젝트 탭 클릭"""
+        """'내가 속한 프로젝트' 사이드바 탭 클릭 (보관된 프로젝트 기본값 우회)"""
         try:
-            tab_selectors = [
-                "//button[contains(text(), '전체 프로젝트')]",
-                "//a[contains(text(), '전체 프로젝트')]",
-                "//div[contains(text(), '전체 프로젝트')]",
-                "//span[contains(text(), '전체 프로젝트')]",
-                "//*[contains(text(), '전체') and contains(text(), '프로젝트')]",
-                "//button[contains(text(), 'All Projects')]",
-                "//a[contains(text(), 'All Projects')]",
-                "//*[@data-tab='all' or @data-tab='active']",
-                "//*[contains(@class, 'tab') and contains(text(), '전체')]",
-                "//li[contains(text(), '전체 프로젝트')]",
-                "//*[@role='tab' and contains(text(), '전체')]",
-                "//nav//*[contains(text(), '전체 프로젝트')]"
+            # 1순위: '내가 속한 프로젝트' 사이드바 항목 클릭
+            my_project_selectors = [
+                "//div[contains(text(), '내가 속한 프로젝트')]",
+                "//span[contains(text(), '내가 속한 프로젝트')]",
+                "//a[contains(text(), '내가 속한 프로젝트')]",
+                "//li[contains(text(), '내가 속한 프로젝트')]",
+                "//*[text()='내가 속한 프로젝트']",
+                "//*[contains(text(), '내가 속한')]",
             ]
-            
-            for selector in tab_selectors:
+
+            for selector in my_project_selectors:
                 try:
-                    tab_element = WebDriverWait(self.driver, 3).until(
+                    tab_element = WebDriverWait(self.driver, 5).until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
-                    
                     try:
                         tab_element.click()
                     except:
                         self.driver.execute_script("arguments[0].click();", tab_element)
-                    
-                    WebDriverWait(self.driver, 5).until(
-                        lambda driver: len(driver.find_elements(By.XPATH, "//a | //div")) > 5
-                    )
+
+                    print("✅ '내가 속한 프로젝트' 탭 클릭 성공")
+                    time.sleep(2)
                     return True
-                    
+
                 except:
                     continue
-            
+
+            # 2순위: '보관된 프로젝트'가 선택된 상태라면 다른 탭으로 이동 시도
+            print("⚠️ '내가 속한 프로젝트' 탭을 찾지 못함, 현재 선택된 탭 확인...")
+            try:
+                active = self.driver.find_element(By.XPATH, "//*[contains(@class, 'active') or contains(@class, 'selected') or contains(@class, 'current')]")
+                print(f"🔍 현재 활성 탭: {active.text.strip()}")
+            except:
+                pass
+
             return False
-            
+
         except Exception as e:
-            print(f"❌ 전체 프로젝트 탭 클릭 실패: {e}")
+            print(f"❌ 프로젝트 탭 클릭 실패: {e}")
             return False
 
     def _wait_for_workspace_list_loaded(self, timeout=20):
