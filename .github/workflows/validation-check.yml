@@ -34,13 +34,13 @@ jobs:
         
     - name: Run validation check
       env:
-        TASKWORLD_EMAIL: ${{ secrets.TASKWORLD_EMAIL }}
-        TASKWORLD_PASSWORD: ${{ secrets.TASKWORLD_PASSWORD }}
+        TU_EMAIL: ${{ secrets.TU_EMAIL }}
+        TU_PASSWORD: ${{ secrets.TU_PASSWORD }}
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
         SLACK_CHANNEL_VALIDATION: ${{ secrets.SLACK_CHANNEL_VALIDATION }}
       run: |
-        python selenium_taskworld_downloader.py validation
+        python tu_downloader.py validation
         
     - name: Upload logs (if failed)
       if: failure()

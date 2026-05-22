@@ -42,7 +42,7 @@ MANUAL_ENTRIES_FILE = "manual_entries.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = False
+DEFAULT_HEADLESS = True
 
 logger = logging.getLogger(__name__)
 

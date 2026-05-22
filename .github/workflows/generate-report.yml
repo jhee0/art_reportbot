@@ -28,14 +28,16 @@ jobs:
     - name: Setup Chrome
       uses: browser-actions/setup-chrome@v1
         
-    - name: Download from Taskworld
+    - name: Download from TU and upload
       env:
-        TASKWORLD_EMAIL: ${{ secrets.TASKWORLD_EMAIL }}
-        TASKWORLD_PASSWORD: ${{ secrets.TASKWORLD_PASSWORD }}
+        TU_EMAIL: ${{ secrets.TU_EMAIL }}
+        TU_PASSWORD: ${{ secrets.TU_PASSWORD }}
+        TU_ART_ID: ${{ secrets.TU_ART_ID }}
+        TU_ART_PASSWORD: ${{ secrets.TU_ART_PASSWORD }}
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
       run: |
-        python selenium_taskworld_downloader.py
+        python tu_downloader.py
         
     - name: Upload logs (if failed)
       if: failure()
