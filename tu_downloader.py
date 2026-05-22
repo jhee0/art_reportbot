@@ -1402,30 +1402,38 @@ class TaskworldSeleniumDownloader:
             else:
                 print("❌ art 페이지 업로드 실패 — 슬랙에 오류 알림")
 
-            # 7. 슬랙 텍스트 리포팅
-            print("\n7️⃣ 슬랙 리포트 전송...")
+            # 7. 슬랙 노티 — 오류/실패 시에만 전송
+            print("\n7️⃣ 슬랙 노티 확인...")
             today_str = datetime.now(self.korea_tz).strftime("%Y-%m-%d")
-            if self.slack_client:
-                if art_success:
-                    slack_msg = f"[{today_str}] ✅ 통계 CSV 업데이트 완료"
-                    if validation_issues:
-                        slack_msg += "\n```\n[검증 오류]"
-                        for issue in validation_issues:
-                            slack_msg += f"\n- {issue}"
-                        slack_msg += "\n```"
-                else:
-                    slack_msg = f"[{today_str}] ❌ art 페이지 CSV 업로드 실패"
+            needs_notify = not art_success or bool(validation_issues)
 
-                print(slack_msg)  # 터미널에도 동일 출력
-                success = self.send_to_slack(None, None, None if art_success else "art 페이지 업로드 실패", validation_issues if art_success else None)
-                if success:
-                    print("✅ 슬랙 전송 완료!")
-                else:
-                    print("❌ 슬랙 전송 실패")
+            if not needs_notify:
+                print("✅ 오류 없음 — 슬랙 노티 생략")
             else:
-                result_msg = f"[{today_str}] ✅ 통계 CSV 업데이트 완료" if art_success else f"[{today_str}] ❌ art 페이지 업로드 실패"
-                print(result_msg)
-                print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
+                if not art_success:
+                    notify_msg = f"[{today_str}] ❌ art 페이지 CSV 업로드 실패"
+                else:
+                    notify_msg = f"[{today_str}] ⚠️ 검증 오류 발견"
+                    notify_msg += "\n```\n[검증 오류]"
+                    for issue in validation_issues:
+                        notify_msg += f"\n- {issue}"
+                    notify_msg += "\n```"
+
+                print(notify_msg)  # 터미널에도 동일 출력
+
+                if self.slack_client:
+                    success = self.send_to_slack(
+                        None,
+                        None,
+                        "art 페이지 업로드 실패" if not art_success else None,
+                        validation_issues if art_success else None
+                    )
+                    if success:
+                        print("✅ 슬랙 노티 전송 완료!")
+                    else:
+                        print("❌ 슬랙 전송 실패")
+                else:
+                    print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
             
             # 8. 파일 정리
             print("\n8️⃣ 파일 정리...")
