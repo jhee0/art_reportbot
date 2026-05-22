@@ -1,4 +1,4 @@
-# selenium_taskworld_downloader.py - 완전 자동화 스크립트 (정리된 버전)
+# tu_downloader.py - TU 인트라넷(tu.aceproject.co.kr) 완전 자동화 스크립트
 import os
 import time
 import glob
@@ -20,13 +20,12 @@ load_dotenv()
 # ==========================================
 # 월별 설정 변수 (매월 수정 필요)
 # ==========================================
-WORKSPACE_NAME = "아트실 일정 - 2026 5월"  # 한달마다 수정하세요!
 OUTPUT_FILENAME = "26_5.csv"  # 한달마다 수정하세요! (예: 25_7.csv, 25_8.csv)
 
 # ==========================================
 # 검증 설정 변수 (필요시 수정)
 # ==========================================
-MIN_REQUIRED_HOURS = 168  # 필요시 수정하세요! (개인별 최소 시간)
+MIN_REQUIRED_HOURS = 144  # 필요시 수정하세요! (개인별 최소 시간)
 
 # ==========================================
 # 파일 경로 설정
@@ -37,11 +36,13 @@ FIRST_TAGS_OPTIONAL_SECOND_FILE = "first_tags_optional_second.txt"
 SECOND_TAGS_ART_FILE = "second_tags_art.txt"
 SECOND_TAGS_PROJECT_FILE = "second_tags_project.txt"
 EXCLUDE_VALUES_FILE = "exclude_values.txt"
+EMAIL_MAP_FILE = "email_map.txt"
+MANUAL_ENTRIES_FILE = "manual_entries.txt"
 
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True
+DEFAULT_HEADLESS = False
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,8 @@ logger = logging.getLogger(__name__)
 class TaskworldSeleniumDownloader:
     def __init__(self, headless=DEFAULT_HEADLESS):
         """
-        Selenium 기반 태스크월드 자동 다운로더 + CSV 처리 + 슬랙 전송
+        Selenium 기반 TU 인트라넷 자동 다운로더 + CSV 처리 + 슬랙 전송
+        (tu.aceproject.co.kr 기준)
         
         Args:
             headless (bool): 브라우저를 숨김 모드로 실행할지 여부
@@ -67,8 +69,7 @@ class TaskworldSeleniumDownloader:
         # 한국 시간대 설정
         self.korea_tz = timezone(timedelta(hours=9))
         
-        print(f"🤖 완전 자동화 다운로더 초기화 - headless: {headless}")
-        print(f"📂 대상 워크스페이스: {WORKSPACE_NAME}")
+        print(f"🤖 TU 자동화 다운로더 초기화 - headless: {headless}")
         print(f"📄 출력 파일명: {OUTPUT_FILENAME}")
         print(f"⏱️ 최소 필수 시간: {MIN_REQUIRED_HOURS}시간")
         print(f"💬 슬랙 채널: '{self.slack_channel}' (따옴표 포함 확인)")
@@ -151,12 +152,81 @@ class TaskworldSeleniumDownloader:
             print(f"❌ 제외 값 로드 실패: {e}")
             return ["주요일정", "아트실", "UI팀", "리소스팀", "디자인팀", "TA팀"]
     
-    def login_to_taskworld(self, email, password):
-        """태스크월드 로그인"""
+    def load_email_map(self):
+        """이메일 → 이름 매핑 파일 로드 (email_map.txt)
+        형식: jhee@aceproject.co.kr : 배진희
+        """
         try:
-            print("🔍 태스크월드 로그인 시작...")
+            if os.path.exists(EMAIL_MAP_FILE):
+                email_map = {}
+                with open(EMAIL_MAP_FILE, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        if ':' in line:
+                            parts = line.split(':', 1)
+                            email = parts[0].strip()
+                            name = parts[1].strip()
+                            email_map[email] = name
+                print(f"✅ 이메일 매핑 로드 완료: {len(email_map)}명 ({EMAIL_MAP_FILE})")
+                return email_map
+            else:
+                # 기본 파일 생성
+                print(f"⚠️ {EMAIL_MAP_FILE} 파일이 없습니다! 기본 파일을 생성합니다.")
+                with open(EMAIL_MAP_FILE, 'w', encoding='utf-8') as f:
+                    f.write("# 이메일 → 이름 매핑 (한 줄에 하나씩)\n")
+                    f.write("# 형식: 이메일@도메인 : 이름\n\n")
+                    f.write("# jhee@aceproject.co.kr : 배진희\n")
+                print(f"✅ {EMAIL_MAP_FILE} 파일이 생성되었습니다. 매핑을 입력하세요.")
+                return {}
+        except Exception as e:
+            print(f"❌ 이메일 매핑 로드 실패: {e}")
+            return {}
+
+    def load_manual_entries(self):
+        """수동 입력 행 로드 (manual_entries.txt)
+        형식: 이름, Task, Tags, Time Spent
+        예시: 배진희, 연차, 연차, 08:00:00
+        """
+        try:
+            if os.path.exists(MANUAL_ENTRIES_FILE):
+                entries = []
+                with open(MANUAL_ENTRIES_FILE, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        parts = [p.strip() for p in line.split(',')]
+                        if len(parts) == 4:
+                            entries.append({
+                                'Name': parts[0],
+                                'Task': parts[1],
+                                'Tags': parts[2],
+                                'Time Spent': parts[3]
+                            })
+                        else:
+                            print(f"⚠️ manual_entries.txt 형식 오류 (4개 값 필요): {line}")
+                print(f"✅ 수동 입력 행 로드 완료: {len(entries)}행 ({MANUAL_ENTRIES_FILE})")
+                return entries
+            else:
+                print(f"ℹ️ {MANUAL_ENTRIES_FILE} 없음, 수동 입력 없이 진행")
+                with open(MANUAL_ENTRIES_FILE, 'w', encoding='utf-8') as f:
+                    f.write("# 수동 입력 행 (연차, 공휴일 등)\n")
+                    f.write("# 형식: 이름, Task, Tags, Time Spent\n")
+                    f.write("# 예시: 배진희, 연차, 연차, 08:00:00\n\n")
+                print(f"✅ {MANUAL_ENTRIES_FILE} 템플릿 생성 완료")
+                return []
+        except Exception as e:
+            print(f"❌ 수동 입력 행 로드 실패: {e}")
+            return []
+
+    def login_to_taskworld(self, email, password):
+        """TU 인트라넷 로그인 (이메일 + 비밀번호)"""
+        try:
+            print("🔍 TU 인트라넷 로그인 시작...")
             
-            self.driver.get("https://asia-enterprise.taskworld.com/login")
+            self.driver.get("https://tu.aceproject.co.kr/login")
             time.sleep(3)
             
             return self._handle_email_login(email, password)
@@ -166,70 +236,277 @@ class TaskworldSeleniumDownloader:
             return False
     
     def _handle_email_login(self, email, password):
-        """일반 이메일 로그인 처리"""
+        """이메일 + 비밀번호 로그인 처리 (TU 인트라넷)"""
         try:
-            print("📧 일반 이메일 로그인 시작...")
+            print("📧 이메일 로그인 시작...")
             
-            # 이메일 입력
+            # 이메일 입력 (label이 '이메일'인 input)
             email_input = self.wait.until(
-                EC.presence_of_element_located((By.NAME, "email"))
+                EC.presence_of_element_located((By.XPATH, "//input[@type='email' or @name='email' or @placeholder]"))
             )
             email_input.clear()
             email_input.send_keys(email)
+            print("✅ 이메일 입력 완료")
             
-            # 패스워드 입력
-            password_input = self.driver.find_element(By.NAME, "password")
+            # 비밀번호 입력 (label이 '비밀번호'인 input)
+            password_input = self.wait.until(
+                EC.presence_of_element_located((By.XPATH, "//input[@type='password' or @name='password']"))
+            )
             password_input.clear()
             password_input.send_keys(password)
+            print("✅ 비밀번호 입력 완료")
             
-            # 로그인 버튼 클릭
-            login_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
+            # 로그인 버튼 클릭 — 구글 로그인 버튼과 혼동되지 않도록 정확히 지정
+            # submit 타입 버튼 우선, 없으면 비밀번호 입력창 이후에 오는 로그인 버튼
+            login_btn = None
+            login_btn_selectors = [
+                "//button[@type='submit' and not(contains(text(),'Google'))]",
+                "//form//button[contains(text(),'로그인')]",
+                "//button[text()='로그인']",
+                "//input[@type='submit' and not(contains(@value,'Google'))]",
+            ]
+            for selector in login_btn_selectors:
+                try:
+                    login_btn = self.wait.until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    print(f"✅ 로그인 버튼 발견: '{login_btn.text.strip()}'")
+                    break
+                except:
+                    continue
+
+            if not login_btn:
+                print("❌ 로그인 버튼을 찾지 못함")
+                return False
+
             login_btn.click()
+            print("✅ 로그인 버튼 클릭")
             
-            # 로그인 완료 대기
-            time.sleep(5)
+            # 로그인 완료 대기 — tu.aceproject.co.kr 도메인으로 돌아올 때까지
+            # 1단계: 로그인 페이지에서 벗어날 때까지 대기
+            print("⏳ 로그인 페이지 이탈 대기...")
+            WebDriverWait(self.driver, 30).until(
+                lambda driver: "login" not in driver.current_url
+            )
+            print(f"  → 현재 URL: {self.driver.current_url}")
+
+            # 2단계: 구글 OAuth 중간 페이지를 거칠 수 있으므로 TU 홈까지 대기
+            print("⏳ TU 홈 페이지 도착 대기 (최대 60초)...")
+            WebDriverWait(self.driver, 60).until(
+                lambda driver: "tu.aceproject.co.kr" in driver.current_url
+                               and "login" not in driver.current_url
+            )
+            time.sleep(3)
+            print(f"  → TU 홈 도착: {self.driver.current_url}")
             
-            print("✅ 이메일 로그인 완료!")
+            print("✅ TU 인트라넷 로그인 완료!")
             return True
             
         except Exception as e:
             print(f"❌ 이메일 로그인 실패: {e}")
             return False
     
-    def navigate_to_workspace(self, workspace_name=WORKSPACE_NAME):
-        """스마트 대기 시스템이 적용된 워크스페이스 이동"""
+    def _add_artroom_team(self):
+        """사이드바 팀 섹션에서 + 버튼 클릭 → 아트실 팀 추가"""
         try:
-            print(f"📂 워크스페이스 '{workspace_name}' 찾기 시작...")
-            
+            # 팀 섹션 안에서만 정확히 '아트실' 텍스트 확인
+            # (프로젝트의 '아트실 5월' 등과 혼동 방지)
+            try:
+                # '팀' 텍스트 이후에 오는 요소 중 text()가 정확히 '아트실'인 것만
+                team_artroom = self.driver.find_elements(
+                    By.XPATH,
+                    "//*[text()='팀']/following::*[text()='아트실']"
+                )
+                visible = [el for el in team_artroom if el.is_displayed() and el.text.strip() == '아트실']
+                if visible:
+                    print("✅ 아트실 팀이 이미 사이드바 팀 섹션에 존재함, 추가 생략")
+                    return True
+                else:
+                    print("ℹ️ 팀 섹션에 아트실 없음, + 버튼으로 추가 시작")
+            except Exception as e:
+                print(f"ℹ️ 팀 섹션 확인 중 오류: {e}, + 버튼으로 추가 시작")
+
+            print("➕ 팀 섹션 + 버튼 탐색 중...")
+
+            # + 버튼은 SVG 아이콘 (class="w-3.5 h-3.5")을 포함한 버튼
+            plus_selectors = [
+                # SVG 클래스로 직접 찾고 부모 버튼 클릭
+                "//*[text()='팀']/following::*[.//*[contains(@class,'w-3.5')]][1]",
+                "//*[text()='팀']/following::button[.//*[contains(@class,'w-3.5')]][1]",
+                "//*[text()='팀']/following::button[1]",
+                "//*[text()='팀']/parent::*//button",
+                "//*[text()='팀']/parent::*/button",
+                # SVG 부모 요소 직접
+                "//svg[contains(@class,'w-3.5')]/parent::button",
+                "//svg[contains(@class,'w-3.5')]/parent::*[@role='button']",
+                "//svg[contains(@class,'w-3.5')]/parent::*",
+            ]
+
+            plus_btn = None
+            for selector in plus_selectors:
+                try:
+                    els = self.driver.find_elements(By.XPATH, selector)
+                    for el in els:
+                        if el.is_displayed():
+                            print(f"✅ 팀 + 버튼 발견: tag={el.tag_name} class='{el.get_attribute('class')}'")
+                            plus_btn = el
+                            break
+                    if plus_btn:
+                        break
+                except:
+                    continue
+
+            if not plus_btn:
+                print("❌ 팀 + 버튼을 찾지 못함")
+                return False
+
+            try:
+                plus_btn.click()
+            except:
+                self.driver.execute_script("arguments[0].click();", plus_btn)
+
+            time.sleep(2)
+            print("✅ 팀 + 버튼 클릭 완료, 팀 검색창 대기...")
+
+            # 팀 검색 입력창 대기 후 '아트실' 입력
+            search_input = None
+            search_selectors = [
+                "//input[@placeholder]",
+                "//input[@type='text']",
+                "//input[@type='search']",
+                "//input[contains(@class,'search') or contains(@class,'input')]",
+            ]
+            for selector in search_selectors:
+                try:
+                    search_input = WebDriverWait(self.driver, 8).until(
+                        EC.presence_of_element_located((By.XPATH, selector))
+                    )
+                    if search_input.is_displayed():
+                        break
+                except:
+                    continue
+
+            if not search_input:
+                print("❌ 팀 검색 입력창을 찾지 못함")
+                return False
+
+            search_input.clear()
+            search_input.send_keys("아트실")
+            print("✅ '아트실' 입력 완료")
+            time.sleep(2)
+
+            # 검색 결과에서 '아트실' 항목 클릭
+            result_selectors = [
+                "//*[text()='아트실']",
+                "//li[contains(text(),'아트실')]",
+                "//div[contains(text(),'아트실')]",
+                "//*[contains(text(),'아트실') and not(contains(text(),'아트실 5월'))]",
+            ]
+            for selector in result_selectors:
+                try:
+                    result_item = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    try:
+                        result_item.click()
+                    except:
+                        self.driver.execute_script("arguments[0].click();", result_item)
+                    print("✅ '아트실' 팀 선택 완료")
+                    time.sleep(2)
+                    return True
+                except:
+                    continue
+
+            print("❌ 검색 결과에서 '아트실'을 찾지 못함")
+            return False
+
+        except Exception as e:
+            print(f"❌ 아트실 팀 추가 실패: {e}")
+            return False
+
+    def navigate_to_workspace(self):
+        """TU 인트라넷: 사이드바에 아트실 팀 추가 후 클릭 → 통계 탭 이동"""
+        try:
+            print(f"📂 '아트실' 사이드바 메뉴 찾기...")
+
+            # 아트실 팀 추가 (없을 경우 + 버튼으로 추가)
+            self._add_artroom_team()
+            time.sleep(2)
+
             max_attempts = 3
-            
             for attempt in range(1, max_attempts + 1):
                 print(f"\n🔄 시도 {attempt}/{max_attempts}")
                 
-                if not self._wait_for_page_ready():
-                    print(f"❌ 시도 {attempt}: 페이지 로딩 대기 실패")
+                # 사이드바에서 '아트실' 클릭 — 정확히 '아트실' 텍스트만 매칭
+                artroom_selectors = [
+                    "//*[text()='아트실']",
+                    "//a[text()='아트실']",
+                    "//span[text()='아트실']",
+                    "//div[text()='아트실']",
+                    "//*[normalize-space(text())='아트실']",
+                ]
+                
+                clicked = False
+                for selector in artroom_selectors:
+                    try:
+                        els = self.driver.find_elements(By.XPATH, selector)
+                        for el in els:
+                            # 텍스트가 정확히 '아트실'인지 재확인 (아트실5월 등 제외)
+                            if el.text.strip() == '아트실' and el.is_displayed():
+                                try:
+                                    el.click()
+                                except:
+                                    self.driver.execute_script("arguments[0].click();", el)
+                                print("✅ '아트실' 클릭 성공")
+                                clicked = True
+                                time.sleep(3)
+                                break
+                        if clicked:
+                            break
+                    except:
+                        continue
+                
+                if not clicked:
+                    print(f"❌ 시도 {attempt}: '아트실' 메뉴를 찾지 못함")
+                    if attempt < max_attempts:
+                        self.driver.refresh()
+                        time.sleep(3)
                     continue
                 
-                if not self._navigate_to_projects_with_smart_wait():
-                    print(f"❌ 시도 {attempt}: 프로젝트 페이지 이동 실패")
-                    continue
+                # '통계' 탭 클릭
+                stats_selectors = [
+                    "//button[contains(text(), '통계')]",
+                    "//span[contains(text(), '통계')]",
+                    "//a[contains(text(), '통계')]",
+                    "//*[text()='통계']",
+                    "//*[contains(@class, 'tab') and contains(text(), '통계')]",
+                ]
                 
-                if not self._click_all_projects_tab():
-                    print(f"⚠️ 시도 {attempt}: '내가 속한 프로젝트' 탭 클릭 실패 - 보관된 프로젝트에서 검색될 수 있음!")
+                stats_clicked = False
+                for selector in stats_selectors:
+                    try:
+                        el = WebDriverWait(self.driver, 8).until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                        try:
+                            el.click()
+                        except:
+                            self.driver.execute_script("arguments[0].click();", el)
+                        print("✅ '통계' 탭 클릭 성공")
+                        stats_clicked = True
+                        time.sleep(3)
+                        break
+                    except:
+                        continue
                 
-                if not self._wait_for_workspace_list_loaded():
-                    print(f"❌ 시도 {attempt}: 워크스페이스 목록 로딩 실패")
-                    continue
-                
-                if self._find_workspace_with_smart_search(workspace_name):
-                    print(f"✅ 시도 {attempt}: 워크스페이스 접속 성공!")
+                if stats_clicked:
+                    print("✅ 아트실 통계 페이지 접속 완료!")
                     return True
                 
-                print(f"❌ 시도 {attempt}: 워크스페이스 찾기 실패")
+                print(f"❌ 시도 {attempt}: '통계' 탭을 찾지 못함")
                 if attempt < max_attempts:
-                    print("🔄 페이지 새로고침 후 재시도...")
                     self.driver.refresh()
-                    time.sleep(2)
+                    time.sleep(3)
             
             print("❌ 모든 시도 실패")
             return False
@@ -238,272 +515,7 @@ class TaskworldSeleniumDownloader:
             print(f"❌ 워크스페이스 접속 중 오류: {e}")
             return False
 
-    def _wait_for_page_ready(self, timeout=20):
-        """페이지가 완전히 준비될 때까지 스마트 대기"""
-        try:
-            print("⏳ 페이지 완전 로딩 대기...")
-            
-            # DOM 로딩 완료 대기
-            WebDriverWait(self.driver, timeout).until(
-                lambda driver: driver.execute_script("return document.readyState") == "complete"
-            )
-            
-            # jQuery 로딩 완료 대기 (있는 경우)
-            try:
-                WebDriverWait(self.driver, 5).until(
-                    lambda driver: driver.execute_script("return typeof jQuery !== 'undefined' && jQuery.active == 0")
-                )
-            except:
-                pass
-            
-            # 기본 body 요소 존재 확인
-            WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ 페이지 로딩 대기 실패: {e}")
-            return False
 
-    def _navigate_to_projects_with_smart_wait(self):
-        """스마트 대기를 적용한 프로젝트 페이지 이동"""
-        try:
-            current_url = self.driver.current_url
-            
-            # 방법 1: URL 직접 수정
-            if "#/home" in current_url:
-                project_url = current_url.replace("#/home", "#/projects")
-                self.driver.get(project_url)
-                
-                try:
-                    WebDriverWait(self.driver, 15).until(
-                        lambda driver: "#/projects" in driver.current_url
-                    )
-                    return True
-                except:
-                    pass
-            
-            # 방법 2: 네비게이션 메뉴 찾기
-            nav_selectors = [
-                "//a[contains(@href, 'projects')]",
-                "//button[contains(text(), 'Projects')]",
-                "//div[contains(text(), 'Projects')]",
-                "//nav//a[contains(text(), 'Project')]",
-                "//*[@data-testid='projects-nav']"
-            ]
-            
-            for selector in nav_selectors:
-                try:
-                    nav_element = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    nav_element.click()
-                    
-                    WebDriverWait(self.driver, 10).until(
-                        lambda driver: "projects" in driver.current_url.lower() or
-                                     len(driver.find_elements(By.XPATH, "//*[contains(text(), 'workspace') or contains(text(), 'project')]")) > 0
-                    )
-                    return True
-                    
-                except:
-                    continue
-            
-            # 방법 3: 강제 URL 구성
-            base_url = current_url.split("#/")[0] if "#/" in current_url else current_url
-            project_url = base_url + "#/projects"
-            self.driver.get(project_url)
-            
-            try:
-                WebDriverWait(self.driver, 10).until(
-                    lambda driver: len(driver.find_elements(By.TAG_NAME, "a")) > 5
-                )
-                return True
-            except:
-                pass
-            
-            return False
-            
-        except Exception as e:
-            print(f"❌ 프로젝트 페이지 이동 실패: {e}")
-            return False
-
-    def _click_all_projects_tab(self):
-        """'내가 속한 프로젝트' 사이드바 탭 클릭 (보관된 프로젝트 기본값 우회)"""
-        try:
-            # 1순위: '내가 속한 프로젝트' 사이드바 항목 클릭
-            my_project_selectors = [
-                "//div[contains(text(), '내가 속한 프로젝트')]",
-                "//span[contains(text(), '내가 속한 프로젝트')]",
-                "//a[contains(text(), '내가 속한 프로젝트')]",
-                "//li[contains(text(), '내가 속한 프로젝트')]",
-                "//*[text()='내가 속한 프로젝트']",
-                "//*[contains(text(), '내가 속한')]",
-            ]
-
-            for selector in my_project_selectors:
-                try:
-                    tab_element = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    try:
-                        tab_element.click()
-                    except:
-                        self.driver.execute_script("arguments[0].click();", tab_element)
-
-                    print("✅ '내가 속한 프로젝트' 탭 클릭 성공")
-                    time.sleep(2)
-                    return True
-
-                except:
-                    continue
-
-            # 2순위: '보관된 프로젝트'가 선택된 상태라면 다른 탭으로 이동 시도
-            print("⚠️ '내가 속한 프로젝트' 탭을 찾지 못함, 현재 선택된 탭 확인...")
-            try:
-                active = self.driver.find_element(By.XPATH, "//*[contains(@class, 'active') or contains(@class, 'selected') or contains(@class, 'current')]")
-                print(f"🔍 현재 활성 탭: {active.text.strip()}")
-            except:
-                pass
-
-            return False
-
-        except Exception as e:
-            print(f"❌ 프로젝트 탭 클릭 실패: {e}")
-            return False
-
-    def _wait_for_workspace_list_loaded(self, timeout=20):
-        """워크스페이스 목록이 실제로 로딩될 때까지 스마트 대기"""
-        try:
-            # 로딩 스피너가 사라질 때까지 대기
-            try:
-                WebDriverWait(self.driver, 10).until_not(
-                    EC.presence_of_element_located((By.XPATH, "//*[contains(@class, 'loading') or contains(@class, 'spinner')]"))
-                )
-            except:
-                pass
-            
-            # 워크스페이스/프로젝트 관련 요소가 나타날 때까지 대기
-            workspace_indicators = [
-                "//*[contains(text(), 'workspace')]",
-                "//*[contains(text(), 'project')]",
-                "//a[contains(@href, 'project')]",
-                "//*[@class*='workspace']",
-                "//*[@class*='project']"
-            ]
-            
-            for indicator in workspace_indicators:
-                try:
-                    WebDriverWait(self.driver, 5).until(
-                        EC.presence_of_element_located((By.XPATH, indicator))
-                    )
-                    break
-                except:
-                    continue
-            
-            # 실제 클릭 가능한 링크들이 최소 개수 이상 로딩될 때까지 대기
-            WebDriverWait(self.driver, timeout).until(
-                lambda driver: len(driver.find_elements(By.XPATH, "//a[@href]")) >= 3
-            )
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ 워크스페이스 목록 로딩 대기 실패: {e}")
-            return False
-
-    def _find_workspace_with_smart_search(self, workspace_name):
-        """정확 매치만 사용하는 안전한 워크스페이스 검색"""
-        try:
-            exact_selectors = [
-                f"//a[contains(text(), '{workspace_name}')]",
-                f"//div[contains(text(), '{workspace_name}')]",
-                f"//span[contains(text(), '{workspace_name}')]",
-                f"//button[contains(text(), '{workspace_name}')]",
-                f"//h1[contains(text(), '{workspace_name}')]",
-                f"//h2[contains(text(), '{workspace_name}')]",
-                f"//h3[contains(text(), '{workspace_name}')]",
-                f"//td[contains(text(), '{workspace_name}')]",
-                f"//li[contains(text(), '{workspace_name}')]",
-                f"//*[@title='{workspace_name}']",
-                f"//*[contains(@aria-label, '{workspace_name}')]",
-                f"//*[text()='{workspace_name}']",
-                f"//*[contains(text(), '{workspace_name}')]"
-            ]
-            
-            workspace_link = self._try_selectors_with_smart_wait(exact_selectors, "정확 매치")
-            if workspace_link:
-                try:
-                    element_text = workspace_link.text.strip()
-                    if workspace_name in element_text:
-                        return self._click_workspace_safely(workspace_link)
-                    else:
-                        print(f"❌ 텍스트 불일치: 예상 '{workspace_name}', 실제 '{element_text}'")
-                except:
-                    print("❌ 요소 텍스트 확인 실패")
-            
-            # 실패 시 디버깅 정보 출력
-            try:
-                all_elements = self.driver.find_elements(By.XPATH, "//a | //div | //span")
-                workspace_candidates = []
-                
-                for element in all_elements:
-                    try:
-                        text = element.text.strip()
-                        if text and len(text) > 5:
-                            if any(keyword in text for keyword in ["아트실", "팀", "프로젝트", "주기", "2025", "2024"]):
-                                workspace_candidates.append(text)
-                    except:
-                        continue
-                
-                unique_candidates = list(set(workspace_candidates))[:15]
-                for i, candidate in enumerate(unique_candidates):
-                    print(f"  {i+1}: {candidate}")
-                    
-            except Exception as debug_error:
-                print(f"  디버깅 정보 수집 실패: {debug_error}")
-            
-            return False
-            
-        except Exception as e:
-            print(f"❌ 워크스페이스 검색 실패: {e}")
-            return False
-
-    def _try_selectors_with_smart_wait(self, selectors, search_type):
-        """스마트 대기를 적용한 셀렉터 시도"""
-        for selector in selectors:
-            try:
-                element = WebDriverWait(self.driver, 3).until(
-                    EC.element_to_be_clickable((By.XPATH, selector))
-                )
-                return element
-            except:
-                continue
-        
-        return None
-
-    def _click_workspace_safely(self, workspace_element):
-        """안전한 워크스페이스 클릭"""
-        try:
-            # 1차: 일반 클릭
-            try:
-                workspace_element.click()
-            except:
-                # 2차: JavaScript 클릭
-                self.driver.execute_script("arguments[0].click();", workspace_element)
-            
-            # 워크스페이스 로딩 확인
-            WebDriverWait(self.driver, 15).until(
-                lambda driver: driver.current_url != self.driver.current_url or
-                              len(driver.find_elements(By.XPATH, "//*[contains(@class, 'task') or contains(@class, 'project')]")) > 0
-            )
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ 워크스페이스 클릭 실패: {e}")
-            return False
     
     def load_allowed_tags(self):
         """허용된 태그 목록 파일에서 로드 - 아트/프로젝트 구조"""
@@ -591,30 +603,32 @@ class TaskworldSeleniumDownloader:
             if 'Tags' not in df.columns:
                 tag_validation_issues.append("Tags 열이 존재하지 않습니다.")
                 return tag_validation_issues
+            if 'Name' not in df.columns:
+                tag_validation_issues.append("Name 열이 존재하지 않습니다. email_map.txt 설정을 확인하세요.")
+                return tag_validation_issues
             
             # 전체 허용된 첫 번째 태그 목록
             all_first_tags = first_tags_required_second + first_tags_optional_second
             
             # 각 행별로 태그 검증
             for idx, row in df.iterrows():
-                person_name = row['Tasklist']
+                person_name = row['Name']  # 이메일 매핑된 이름
                 tags = row['Tags']
                 task_name = row['Task']
                 task_display = str(task_name)[:20] + "..." if len(str(task_name)) > 20 else str(task_name)
-                    
+
+                # 이름 설정 (email_map 변환된 이름 전체 사용)
+                if pd.isna(person_name) or str(person_name).strip() == '':
+                    person_group = '미분류'
+                else:
+                    person_group = str(person_name).strip()
+
                 # 태그가 비어있거나 NaN인 경우 오류 추가
                 if pd.isna(tags) or tags == '' or tags == 0:
                     issue_msg = f"{person_group}님 태그 오류 : {task_display} (태그 없음)"
                     if issue_msg not in tag_validation_issues:
                         tag_validation_issues.append(issue_msg)
                     continue
-                
-                # 이름 그룹핑 (기존 로직과 동일)
-                if pd.isna(person_name) or person_name == '':
-                    person_group = '미분류'
-                else:
-                    name_str = str(person_name).strip()
-                    person_group = name_str[:3] if len(name_str) >= 3 else name_str
                 
                 # 태그를 쉼표로 분리
                 tag_list = str(tags).split(',')
@@ -684,26 +698,15 @@ class TaskworldSeleniumDownloader:
         try:
             if len(df.columns) < 4:
                 return ["열 수가 부족합니다. 최소 4개 열이 필요합니다."]
-            
-            # 열 이름 설정 (원본 19열 그대로 유지)
-            original_columns = ['Project', 'Tasklist', 'Task', 'Description', 'Assigned To', 'Followers',
-                              'Creation Date', 'Completion Date', 'Start Date', 'Due Date', 'Tags',
-                              'Status', 'Points', 'Time Spent', 'Checklist', 'Comments', 'Files',
-                              'Subtask', 'Subtask Reference ID']
-            
-            # 실제 컬럼 수에 맞게 조정
-            if len(df.columns) > len(original_columns):
-                for i in range(len(original_columns), len(df.columns)):
-                    original_columns.append(f'Col_{i+1}')
 
-                df.columns = original_columns[:len(df.columns)]
-            else:
-                essential_columns = ['Tasklist', 'Task', 'Tags', 'Time_Spent']
-                if len(df.columns) >= 4:
-                    df.columns = essential_columns + [f'Col_{i}' for i in range(4, len(df.columns))]
-                else:
-                    print(f"컬럼 수 부족: {len(df.columns)}개")
-            
+            # process_csv에서 이미 컬럼명과 Name 컬럼이 설정된 df가 들어오므로
+            # 컬럼 재설정 없이 그대로 사용
+            # 필수 컬럼 존재 여부만 확인
+            required = ['Name', 'Task', 'Tags', 'Time Spent']
+            missing = [c for c in required if c not in df.columns]
+            if missing:
+                return [f"필수 컬럼 없음: {missing}"]
+
             # 1. 태그 설정 로드
             first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project = self.load_allowed_tags()
             
@@ -759,16 +762,11 @@ class TaskworldSeleniumDownloader:
             except (ValueError, IndexError, TypeError):
                 return 0.0
         
-        def get_name_group(tasklist_name):
-            """이름 앞 3글자로 그룹핑"""
-            if pd.isna(tasklist_name) or tasklist_name == '':
+        def get_name_group(name):
+            """이름 전체 반환 (email_map으로 이미 변환된 이름 사용)"""
+            if pd.isna(name) or str(name).strip() == '':
                 return '미분류'
-            
-            name_str = str(tasklist_name).strip()
-            if len(name_str) >= 3:
-                return name_str[:3]
-            else:
-                return name_str
+            return str(name).strip()
         
         # Time Spent 컬럼 찾기
         time_column = None
@@ -785,8 +783,9 @@ class TaskworldSeleniumDownloader:
         # 시간 데이터 변환
         df['Time_Hours'] = df[time_column].apply(convert_time_to_hours)
         
-        # 이름 그룹 생성
-        df['Name_Group'] = df['Tasklist'].apply(get_name_group)
+        # 이름 그룹 생성 (매핑된 이름 컬럼 사용)
+        name_col = 'Name' if 'Name' in df.columns else 'Assigned To'
+        df['Name_Group'] = df[name_col].apply(get_name_group)
         
         # 그룹별 시간 합계 계산
         group_totals = df.groupby('Name_Group')['Time_Hours'].sum()
@@ -801,45 +800,79 @@ class TaskworldSeleniumDownloader:
         
         return validation_issues
     
-    def process_csv(self, input_file, columns=['Tasklist', 'Task', 'Tags', 'Time Spent']):
-        """CSV 파일 처리 - 검증용 열 제외하고 최종 파일 저장"""
+    def process_csv(self, input_file, columns=['Assigned To', 'Task', 'Tags', 'Time Spent']):
+        """CSV 파일 처리 - Assigned To(이메일→이름 변환) 기반 필터링 후 저장"""
         try:
             # CSV 읽기
             df = pd.read_csv(input_file)
             original_count = len(df)
-            
-            # 제외값 필터링
-            exclude_values = self.load_exclude_values()
-            if 'Tasklist' in df.columns:
-                df_filtered = df[~df['Tasklist'].isin(exclude_values)]
-                removed_count = original_count - len(df_filtered)
+            print(f"📊 원본 행 수: {original_count}")
+
+            # 이메일 → 이름 매핑 로드
+            email_map = self.load_email_map()
+
+            # Assigned To 이메일 → 이름 변환
+            if 'Assigned To' in df.columns:
+                df['Name'] = df['Assigned To'].apply(
+                    lambda x: email_map.get(str(x).strip(), str(x).strip()) if pd.notna(x) else ''
+                )
+                print(f"✅ 이름 변환 완료")
             else:
-                df_filtered = df
-                removed_count = 0
-            
-            # 검증 (원본 19열 데이터로 검증)
-            validation_issues = self.validate_csv_data(df_filtered.copy(), min_hours=MIN_REQUIRED_HOURS)
-            
-            # 열 선택 (최종 파일용 4열만)
-            final_columns = ['Tasklist', 'Task', 'Tags', 'Time Spent']
+                print("⚠️ 'Assigned To' 열 없음")
+                df['Name'] = ''
+
+            # Assigned To가 비어있는 행 체크 (오류로 수집, 제거하지 않음)
+            empty_assigned = df[df['Assigned To'].isna() | (df['Assigned To'].astype(str).str.strip() == '')]
+            assigned_warnings = []
+            for _, row in empty_assigned.iterrows():
+                task_display = str(row['Task'])[:25] + "..." if len(str(row['Task'])) > 25 else str(row['Task'])
+                assigned_warnings.append(f"담당자 없음 오류 : {task_display} (Assigned To 비어있음)")
+                print(f"⚠️ 담당자 없음: {task_display}")
+
+            # email_map에 없는 이메일 경고
+            if email_map:
+                unmapped = df[~df['Assigned To'].isna() &
+                              ~df['Assigned To'].astype(str).str.strip().isin(email_map.keys())]
+                for email_val in unmapped['Assigned To'].dropna().unique():
+                    email_val = str(email_val).strip()
+                    if email_val:
+                        print(f"⚠️ email_map 미등록 이메일: {email_val}")
+
+            # 필터링 없이 전체 행 사용
+            df_filtered = df
+            removed_count = 0
+            print(f"📊 전체 행 수: {len(df_filtered)}")
+
+            # 최종 4열: Name, Task, Tags, Time Spent
+            final_columns = ['Name', 'Task', 'Tags', 'Time Spent']
             missing_columns = [col for col in final_columns if col not in df_filtered.columns]
             if missing_columns:
                 return None, None, f"열을 찾을 수 없음: {missing_columns}", []
-            
-            selected_df = df_filtered[final_columns]
-            
-            # 최종 파일 저장 시에는 4개 열만 저장
-            final_df = selected_df[['Tasklist', 'Task', 'Tags', 'Time Spent']]
-            
+
+            final_df = df_filtered[final_columns].copy()
+
+            # 수동 입력 행 추가 (연차, 공휴일 등) — 검증 전에 추가해서 시간 합산에 포함
+            manual_entries = self.load_manual_entries()
+            if manual_entries:
+                manual_df = pd.DataFrame(manual_entries, columns=['Name', 'Task', 'Tags', 'Time Spent'])
+                final_df = pd.concat([final_df, manual_df], ignore_index=True)
+                print(f"✅ 수동 입력 {len(manual_entries)}행 추가 완료")
+
+            # 검증 (수동 입력 포함된 df로 검증)
+            validation_issues = self.validate_csv_data(final_df.copy(), min_hours=MIN_REQUIRED_HOURS)
+            # 담당자 없음 오류 추가
+            if assigned_warnings:
+                validation_issues = assigned_warnings + validation_issues
+
             # 파일 저장
             output_file = OUTPUT_FILENAME
             if os.path.exists(output_file):
                 os.remove(output_file)
-            
             final_df.to_csv(output_file, index=False, header=False, encoding='utf-8-sig')
-            
-            return selected_df, removed_count, output_file, validation_issues
-            
+            print(f"✅ 파일 저장 완료: {output_file}")
+
+            return final_df, removed_count, output_file, validation_issues
+
         except Exception as e:
             return None, None, f"CSV 처리 오류: {str(e)}", []
 
@@ -855,7 +888,7 @@ class TaskworldSeleniumDownloader:
         try:
             validation_channel = os.getenv(channel_env_var, "#아트실")
             mentioned_people = self._extract_people_from_issues(validation_issues)
-            message_text = f"[태스크월드 검토] {WORKSPACE_NAME} 오류 발견 ☠️"
+            message_text = f"[TU 검토] 아트실 오류 발견 ☠️"
             
             if mentioned_people:
                 people_list = ", ".join(mentioned_people)
@@ -903,12 +936,12 @@ class TaskworldSeleniumDownloader:
         """검증 전용 실행 (전체 프로세스와 동일하되 파일 업로드 없이 검증 결과만 슬랙 전송)"""
         try:
             # 환경변수에서 로그인 정보 읽기
-            email = os.getenv("TASKWORLD_EMAIL")
-            password = os.getenv("TASKWORLD_PASSWORD")
-            workspace = os.getenv("TASKWORLD_WORKSPACE", WORKSPACE_NAME)
+            email = os.getenv("TU_EMAIL")
+            password = os.getenv("TU_PASSWORD")
+            workspace = None  # 아트실 고정, 환경변수 불필요
             
             if not email or not password:
-                error_msg = "환경변수 필요: TASKWORLD_EMAIL, TASKWORLD_PASSWORD"
+                error_msg = "환경변수 필요: TU_EMAIL, TU_PASSWORD"
                 self.send_validation_report_to_slack([error_msg], channel_env_var)
                 return False
             
@@ -920,13 +953,13 @@ class TaskworldSeleniumDownloader:
             
             # 2. 로그인
             if not self.login_to_taskworld(email, password):
-                error_msg = "태스크월드 로그인 실패"
+                error_msg = "TU 인트라넷 로그인 실패"
                 self.send_validation_report_to_slack([error_msg], channel_env_var)
                 return False
             
-            # 3. 워크스페이스 이동
-            if not self.navigate_to_workspace(workspace):
-                error_msg = f"워크스페이스 '{workspace}' 접속 실패"
+            # 3. 아트실 이동
+            if not self.navigate_to_workspace():
+                error_msg = "아트실 통계 페이지 접속 실패"
                 self.send_validation_report_to_slack([error_msg], channel_env_var)
                 return False
             
@@ -984,6 +1017,140 @@ class TaskworldSeleniumDownloader:
             if self.driver:
                 self.driver.quit()
 
+    def upload_to_art_page(self, csv_file_path):
+        """tu.aceproject.co.kr/art/ 에 CSV 파일 업로드"""
+        art_email = os.getenv("TU_ART_ID")
+        art_password = os.getenv("TU_ART_PASSWORD")
+
+        if not art_email or not art_password:
+            print("⚠️ TU_ART_ID / TU_ART_PASSWORD 환경변수 없음, art 업로드 건너뜀")
+            return False
+
+        art_driver = None
+        try:
+            print("🌐 art 페이지 업로드 시작...")
+
+            # 별도 브라우저 인스턴스 (메인과 동일한 headless 설정)
+            from selenium.webdriver.chrome.options import Options as ChromeOptions
+            art_options = ChromeOptions()
+            if self.headless:
+                art_options.add_argument("--headless")
+            art_options.add_argument("--no-sandbox")
+            art_options.add_argument("--disable-dev-shm-usage")
+            art_options.add_argument("--disable-gpu")
+            art_options.add_argument("--window-size=1920,1080")
+            art_driver = webdriver.Chrome(options=art_options)
+            art_wait = WebDriverWait(art_driver, 30)
+
+            # 1단계: Basic Auth — URL에 인증 정보 포함 (브라우저 팝업 방식)
+            print("  🔑 art 페이지 Basic Auth 로그인 준비...")
+
+            # 2단계: /art/ 페이지 이동 (Basic Auth를 URL에 포함)
+            import urllib.parse
+            art_id_encoded = urllib.parse.quote(art_email, safe='')
+            art_pw_encoded = urllib.parse.quote(art_password, safe='')
+            art_url = f"https://{art_id_encoded}:{art_pw_encoded}@tu.aceproject.co.kr/art/"
+            art_driver.get(art_url)
+            time.sleep(3)
+            print("  ✅ art 페이지 이동 완료")
+
+            # 3단계: 'CSV 업로드' 버튼 클릭
+            csv_upload_selectors = [
+                "//button[contains(text(), 'CSV 업로드')]",
+                "//button[contains(text(), 'CSV')]",
+                "//*[contains(text(), 'CSV 업로드')]",
+                "//a[contains(text(), 'CSV 업로드')]",
+            ]
+            csv_btn = None
+            for selector in csv_upload_selectors:
+                try:
+                    csv_btn = WebDriverWait(art_driver, 8).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    print(f"  ✅ CSV 업로드 버튼 발견")
+                    break
+                except:
+                    continue
+
+            if not csv_btn:
+                print("  ❌ CSV 업로드 버튼을 찾지 못함")
+                return False
+
+            try:
+                csv_btn.click()
+            except:
+                art_driver.execute_script("arguments[0].click();", csv_btn)
+            time.sleep(2)
+            print("  ✅ CSV 업로드 버튼 클릭")
+
+            # 4단계: 파일 input에 파일 경로 전달 (드래그앤드롭 영역)
+            abs_path = os.path.abspath(csv_file_path)
+            file_input_selectors = [
+                "//input[@type='file']",
+                "//input[contains(@accept, 'csv') or contains(@accept, '.csv')]",
+            ]
+            file_input = None
+            for selector in file_input_selectors:
+                try:
+                    file_input = WebDriverWait(art_driver, 8).until(
+                        EC.presence_of_element_located((By.XPATH, selector))
+                    )
+                    break
+                except:
+                    continue
+
+            if not file_input:
+                print("  ❌ 파일 input 요소를 찾지 못함")
+                return False
+
+            # hidden input도 send_keys 가능하게 처리
+            art_driver.execute_script("arguments[0].style.display = 'block';", file_input)
+            file_input.send_keys(abs_path)
+            time.sleep(2)
+            print(f"  ✅ 파일 선택 완료: {os.path.basename(abs_path)}")
+
+            # 5단계: 업로드 버튼 클릭
+            upload_btn_selectors = [
+                "//button[text()='업로드']",
+                "//button[contains(text(), '업로드')]",
+                "//*[text()='업로드']",
+            ]
+            upload_btn = None
+            for selector in upload_btn_selectors:
+                try:
+                    upload_btn = WebDriverWait(art_driver, 8).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    break
+                except:
+                    continue
+
+            if not upload_btn:
+                print("  ❌ 업로드 버튼을 찾지 못함")
+                return False
+
+            try:
+                upload_btn.click()
+            except:
+                art_driver.execute_script("arguments[0].click();", upload_btn)
+            time.sleep(3)
+            print("  ✅ 업로드 버튼 클릭 완료")
+
+            print("✅ art 페이지 CSV 업로드 완료!")
+            return True
+
+        except Exception as e:
+            import traceback
+            import traceback
+            print(f"❌ art 페이지 업로드 실패: {e}")
+            print(f"[상세 오류]\n{traceback.format_exc()}")
+            print(traceback.format_exc())
+            return False
+
+        finally:
+            if art_driver:
+                art_driver.quit()
+
     def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None):
         """슬랙에 리포트 전송 (파일 업로드 + 메시지)"""
         if not self.slack_client:
@@ -1011,12 +1178,12 @@ class TaskworldSeleniumDownloader:
             
             # 3. 메시지 전송
             today = datetime.now(self.korea_tz).strftime("%Y-%m-%d")
-            message_text = f"[{today}] 태스크월드 리포트 ({WORKSPACE_NAME})"
+            message_text = f"[{today}] TU 인트라넷 리포트 (아트실)"
 
             if error_message:
-                message_text += f"\n파일 업로드 실패: `{error_message}`"
+                message_text += f"\n❌ 오류 발생: `{error_message}`"
             else:
-                message_text += f"\n✅ 파일 업로드 성공: `{OUTPUT_FILENAME}`"
+                message_text += f"\n✅ 통계 CSV 업데이트 완료"
 
                 if validation_issues:
                     message_text += f"\n```"
@@ -1024,44 +1191,16 @@ class TaskworldSeleniumDownloader:
                     for issue in validation_issues:
                         message_text += f"\n- {issue}"
                     message_text += f"\n```"
-                    
+
             msg_response = self.slack_client.chat_postMessage(
                 channel=actual_channel_id,
                 text=message_text
             )
-            
+
             if not msg_response.get('ok'):
                 return False
-            
-            message_channel = msg_response.get('channel')
-            message_ts = msg_response.get('ts')
-            
-            # 4. 파일 업로드 (파일이 있고 에러가 아닐 경우에만)
-            if csv_file_path and os.path.exists(csv_file_path) and not error_message:
-                filename = os.path.basename(csv_file_path)
-                
-                try:
-                    with open(csv_file_path, 'rb') as file_obj:
-                        file_response = self.slack_client.files_upload_v2(
-                            channel=message_channel,
-                            file=file_obj,
-                            filename=filename,
-                            title=f"태스크월드 리포트 - {today}"
-                        )
-                    
-                    if file_response.get('ok'):
-                        return True
-                    else:
-                        error_detail = file_response.get('error', 'unknown')
-                        self._send_upload_error_thread(message_channel, message_ts, filename, error_detail, file_response)
-                        return False
-                        
-                except Exception as file_error:
-                    filename = os.path.basename(csv_file_path)
-                    self._send_upload_error_thread(message_channel, message_ts, filename, f"예외 발생: {str(file_error)}", None)
-                    return False
-            else:
-                return True
+
+            return True
         
         except Exception as e:
             return False
@@ -1090,245 +1229,114 @@ class TaskworldSeleniumDownloader:
         except Exception as e:
             pass
 
-    def _is_clickable_button(self, element):
-        """요소가 실제 클릭 가능한 버튼인지 확인"""
-        try:
-            tag_name = element.tag_name.lower()
-            if tag_name in ['button', 'input', 'a']:
-                return True
-            
-            if tag_name == 'input':
-                input_type = element.get_attribute('type')
-                if input_type in ['button', 'submit']:
-                    return True
-            
-            onclick = element.get_attribute('onclick')
-            if onclick:
-                return True
-            
-            cursor_style = element.value_of_css_property('cursor')
-            if cursor_style == 'pointer':
-                return True
-            
-            role = element.get_attribute('role')
-            if role == 'button':
-                return True
-            
-            try:
-                parent = element.find_element(By.XPATH, "..")
-                parent_tag = parent.tag_name.lower()
-                if parent_tag in ['button', 'a']:
-                    return True
-                
-                parent_role = parent.get_attribute('role')
-                if parent_role == 'button':
-                    return True
-                    
-                parent_onclick = parent.get_attribute('onclick')
-                if parent_onclick:
-                    return True
-                    
-            except:
-                pass
-            
-            class_name = element.get_attribute('class') or ""
-            button_keywords = ['btn', 'button', 'clickable', 'action', 'export']
-            if any(keyword in class_name.lower() for keyword in button_keywords):
-                return True
-            
-            return False
-            
-        except Exception as e:
-            return False
-    
+
     def export_csv(self):
-        """CSV 내보내기 실행"""
+        """TU 인트라넷 통계 페이지에서 'Taskworld 내보내기' 버튼 클릭 → CSV 다운로드"""
         try:
             # 다운로드 전 기존 CSV 파일 목록 저장 및 정리
-            existing_csvs = glob.glob(os.path.join(self.download_dir, "*.csv"))
-            
-            # 기존 export-projects 관련 파일들 삭제 (중복 방지)
-            export_files_pattern = os.path.join(self.download_dir, "export-projects*.csv")
-            export_files = glob.glob(export_files_pattern)
-            
+            export_files = glob.glob(os.path.join(self.download_dir, "export-projects*.csv"))
             for file in export_files:
                 try:
                     os.remove(file)
-                except Exception as e:
+                except:
                     pass
             
-            # 다운로드 전 기존 CSV 파일 목록 다시 저장
-            existing_csvs = glob.glob(os.path.join(self.download_dir, "*.csv"))
+            existing_csvs = set(glob.glob(os.path.join(self.download_dir, "*.csv")))
             
-            time.sleep(3)
+            time.sleep(2)
             
-            # 1단계: URL을 직접 수정해서 설정 페이지로 이동
-            current_url = self.driver.current_url
-            
-            if "view=board" in current_url:
-                settings_url = current_url.replace("view=board", "view=settings&menu=general")
-                self.driver.get(settings_url)
-                time.sleep(3)
-            else:
-                if "?" in current_url:
-                    settings_url = current_url + "&view=settings&menu=general"
-                else:
-                    settings_url = current_url + "?view=settings&menu=general"
-                
-                self.driver.get(settings_url)
-                time.sleep(3)
-            
-            # 2단계: CSV 내보내기 버튼 찾기
-            csv_export_selectors = [
-                "//button[contains(@class, 'export') and contains(text(), 'CSV')]",
-                "//button[contains(@data-action, 'csv') or contains(@data-action, 'export')]",
-                "//button[contains(@onclick, 'csv') or contains(@onclick, 'export')]",
-                "//input[@type='button' and contains(@value, 'CSV')]",
-                "//a[contains(@href, 'csv') or contains(@href, 'export')]",
-                "//button[contains(text(), 'CSV로 내보내기')]",
-                "//*[contains(text(), 'CSV로 내보내기')]",
-                "//div[contains(text(), 'CSV로 내보내기')]",
-                "//span[contains(text(), 'CSV로 내보내기')]",
-                "//a[contains(text(), 'CSV로 내보내기')]",
-                "//button[contains(text(), 'CSV')]",
-                "//button[contains(text(), '내보내기')]",
-                "//a[contains(text(), 'CSV')]",
-                "//div[contains(text(), 'CSV')]",
-                "//span[contains(text(), 'CSV')]",
-                "//*[contains(text(), 'Export')]"
+            # 'Taskworld 내보내기' 버튼 찾기
+            print("🔍 'Taskworld 내보내기' 버튼 탐색 중...")
+            tw_export_selectors = [
+                "//button[contains(text(), 'Taskworld 내보내기')]",
+                "//a[contains(text(), 'Taskworld 내보내기')]",
+                "//span[contains(text(), 'Taskworld 내보내기')]",
+                "//*[contains(text(), 'Taskworld 내보내기')]",
+                "//button[contains(text(), 'Taskworld')]",
+                "//*[contains(text(), 'Taskworld') and contains(text(), '내보내기')]",
             ]
             
-            export_csv_btn = None
-            found_selector = None
-            
-            for i, selector in enumerate(csv_export_selectors):
+            export_btn = None
+            for selector in tw_export_selectors:
                 try:
-                    elements = self.driver.find_elements(By.XPATH, selector)
-                    
-                    if elements:
-                        for j, element in enumerate(elements):
-                            try:
-                                tag_name = element.tag_name
-                                text = element.text.strip()
-                                is_enabled = element.is_enabled()
-                                is_displayed = element.is_displayed()
-                                
-                                is_actual_button = self._is_clickable_button(element)
-                                
-                                if is_enabled and is_displayed and is_actual_button and not export_csv_btn:
-                                    export_csv_btn = element
-                                    found_selector = selector
-                                    break
-                                    
-                            except Exception as e:
-                                pass
-                        
-                        if export_csv_btn:
-                            break
-                            
-                except Exception as e:
+                    export_btn = WebDriverWait(self.driver, 8).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    print(f"✅ 'Taskworld 내보내기' 버튼 발견: {selector}")
+                    break
+                except:
                     continue
             
-            if not export_csv_btn:
+            if not export_btn:
+                print("❌ 'Taskworld 내보내기' 버튼을 찾지 못함")
                 return None
-                
-            # 1차 시도: 일반 클릭
+            
+            # 1차: 일반 클릭
             try:
-                export_csv_btn.click()
-            except Exception as e:
+                export_btn.click()
+                print("✅ 버튼 클릭 (일반)")
+            except:
                 pass
             
             time.sleep(2)
             
-            # 2차 시도: JavaScript 강제 클릭
+            # 2차: JavaScript 강제 클릭
             try:
-                self.driver.execute_script("arguments[0].click();", export_csv_btn)
-            except Exception as e:
+                self.driver.execute_script("arguments[0].click();", export_btn)
+                print("✅ 버튼 클릭 (JavaScript)")
+            except:
                 pass
             
             time.sleep(2)
             
-            # 3차 시도: ActionChains 클릭
-            try:
-                from selenium.webdriver.common.action_chains import ActionChains
-                actions = ActionChains(self.driver)
-                actions.move_to_element(export_csv_btn).click().perform()
-            except Exception as e:
-                pass
-                
-            time.sleep(3)
-            
-            # 다운로드 완료 대기 (새로운 파일이 생성될 때까지)
+            # 다운로드 완료 대기 (최대 120초)
+            print("⏳ CSV 다운로드 대기 중...")
             timeout = 120
             check_interval = 2
             
             for i in range(0, timeout, check_interval):
-                # 현재 CSV 파일 목록 확인
-                current_csvs = glob.glob(os.path.join(self.download_dir, "*.csv"))
-                new_csvs = [f for f in current_csvs if f not in existing_csvs]
+                # 현재 폴더에서 새 CSV 확인
+                current_csvs = set(glob.glob(os.path.join(self.download_dir, "*.csv")))
+                new_csvs = current_csvs - existing_csvs
                 
                 if new_csvs:
-                    # 가장 최신 파일 찾기 (생성 시간 기준)
                     latest_file = max(new_csvs, key=os.path.getctime)
-                    
-                    # 파일 크기 확인 (0바이트가 아닌지)
-                    file_size = os.path.getsize(latest_file)
-                    
-                    if file_size > 0:
+                    if os.path.getsize(latest_file) > 0:
+                        print(f"✅ CSV 다운로드 완료: {os.path.basename(latest_file)}")
                         return latest_file
-                    else:
-                        print("⚠️ 파일 크기가 0바이트, 계속 대기...")
                 
-                # Downloads 폴더도 확인 (export-projects 관련 파일)
+                # Downloads 폴더도 확인
                 downloads_pattern = os.path.expanduser("~/Downloads/export-projects*.csv")
                 downloads_csvs = glob.glob(downloads_pattern)
-                
                 if downloads_csvs:
-                    # 가장 최신 파일 찾기
                     latest_download = max(downloads_csvs, key=os.path.getctime)
-                    mod_time = os.path.getmtime(latest_download)
-                    
-                    # 10분 이내에 생성된 파일만 확인
-                    if time.time() - mod_time < 600:
-                        
-                        # 현재 폴더로 복사
+                    if time.time() - os.path.getmtime(latest_download) < 600:
                         import shutil
                         local_file = os.path.basename(latest_download)
                         shutil.copy(latest_download, local_file)
-                        
-                        # Downloads의 원본 파일 삭제 (정리)
                         try:
                             os.remove(latest_download)
                         except:
                             pass
-                            
+                        print(f"✅ CSV 다운로드 완료 (Downloads 폴더): {local_file}")
                         return local_file
                 
-                # .crdownload 파일 확인 (Chrome 다운로드 중 파일)
-                downloading_files = glob.glob(os.path.join(self.download_dir, "*.crdownload"))
-                downloads_crdownload = glob.glob(os.path.expanduser("~/Downloads/*.crdownload"))
-                
-                if downloading_files or downloads_crdownload:
-                    pass
-                elif i % 20 == 0:  # 20초마다 상태 출력
-                    # 주기적으로 페이지 새로고침
-                    if i > 0 and i % 60 == 0:
-                        try:
-                            # 현재 URL이 여전히 설정 페이지인지 확인
-                            if "settings" not in self.driver.current_url:
-                                self.driver.refresh()
-                        except:
-                            pass
+                # .crdownload 확인 (다운로드 중)
+                if glob.glob(os.path.join(self.download_dir, "*.crdownload")):
+                    pass  # 아직 다운로드 중
+                elif i % 20 == 0 and i > 0:
+                    print(f"  ⏳ {i}초 경과, 계속 대기 중...")
                 
                 time.sleep(check_interval)
             
+            print("❌ CSV 다운로드 타임아웃 (120초 초과)")
             return None
             
         except Exception as e:
             print(f"❌ CSV 내보내기 실패: {e}")
             return None
 
-    def run_complete_automation(self, email, password, workspace_name=WORKSPACE_NAME):
+    def run_complete_automation(self, email, password):
         """완전 자동화 프로세스 실행: 다운로드 → 처리 → 슬랙 전송"""
         try:
             print("🚀 완전 자동화 프로세스 시작")
@@ -1344,14 +1352,14 @@ class TaskworldSeleniumDownloader:
             # 2. 로그인
             print("\n2️⃣ 로그인...")
             if not self.login_to_taskworld(email, password):
-                error_msg = "태스크월드 로그인 실패"
+                error_msg = "TU 인트라넷 로그인 실패"
                 self.send_to_slack(None, None, error_msg)
                 return None
             
             # 3. 워크스페이스 이동
-            print("\n3️⃣ 워크스페이스 이동...")
-            if not self.navigate_to_workspace(workspace_name):
-                error_msg = f"워크스페이스 '{workspace_name}' 접속 실패"
+            print("\n3️⃣ 아트실 이동...")
+            if not self.navigate_to_workspace():
+                error_msg = "아트실 통계 페이지 접속 실패"
                 self.send_to_slack(None, None, error_msg)
                 return None
             
@@ -1364,7 +1372,7 @@ class TaskworldSeleniumDownloader:
                 self.send_to_slack(None, None, error_msg)
                 return None
             
-            print(f"\n✅ 태스크월드 CSV 다운로드 완료: {csv_file}")
+            print(f"\n✅ TU CSV 다운로드 완료: {csv_file}")
 
             # 5. CSV 처리 + 검증 (Due Date 체크 제외)
             print("\n5️⃣ CSV 파일 처리 및 검증...")
@@ -1386,27 +1394,41 @@ class TaskworldSeleniumDownloader:
                 print("✅ 모든 데이터 검증 통과")
             
             
-            # 6. 슬랙 전송 (검증 결과 + 점검 필요 알림 포함)
-            print("\n6️⃣ 슬랙 리포트 전송...")
+            # 6. art 페이지에 CSV 업로드
+            print("\n6️⃣ art 페이지 CSV 업로드...")
+            art_success = self.upload_to_art_page(processed_file)
+            if art_success:
+                print("✅ art 페이지 업로드 완료!")
+            else:
+                print("❌ art 페이지 업로드 실패 — 슬랙에 오류 알림")
+
+            # 7. 슬랙 텍스트 리포팅
+            print("\n7️⃣ 슬랙 리포트 전송...")
+            today_str = datetime.now(self.korea_tz).strftime("%Y-%m-%d")
             if self.slack_client:
-                # 통계 정보 구성
-                stats_info = f"총 {len(result_df) + (removed_count or 0)}행 → 필터링 {removed_count or 0}행 → 최종 {len(result_df)}행"
-                
-                print(f"📊 전송할 통계: {stats_info}")
-                print(f"📁 전송할 파일: {processed_file}")
-                
-                success = self.send_to_slack(processed_file, stats_info, None, validation_issues)
+                if art_success:
+                    slack_msg = f"[{today_str}] ✅ 통계 CSV 업데이트 완료"
+                    if validation_issues:
+                        slack_msg += "\n```\n[검증 오류]"
+                        for issue in validation_issues:
+                            slack_msg += f"\n- {issue}"
+                        slack_msg += "\n```"
+                else:
+                    slack_msg = f"[{today_str}] ❌ art 페이지 CSV 업로드 실패"
+
+                print(slack_msg)  # 터미널에도 동일 출력
+                success = self.send_to_slack(None, None, None if art_success else "art 페이지 업로드 실패", validation_issues if art_success else None)
                 if success:
-                    print("✅ 슬랙 전송 완료! (파일+메시지 모두 성공)")
+                    print("✅ 슬랙 전송 완료!")
                 else:
                     print("❌ 슬랙 전송 실패")
-                    # 실패해도 파일은 생성되었으므로 프로세스는 성공으로 간주
-                    print("💡 파일은 생성되었으니 수동으로 슬랙에 업로드 가능")
             else:
+                result_msg = f"[{today_str}] ✅ 통계 CSV 업데이트 완료" if art_success else f"[{today_str}] ❌ art 페이지 업로드 실패"
+                print(result_msg)
                 print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
             
-            # 7. 파일 정리
-            print("\n7️⃣ 파일 정리...")
+            # 8. 파일 정리
+            print("\n8️⃣ 파일 정리...")
             try:
                 # 원본 파일 삭제 (처리된 파일만 남김)
                 if os.path.exists(csv_file):
@@ -1458,14 +1480,13 @@ if __name__ == "__main__":
     import sys
     
     print("🔍 환경변수 확인:")
-    print(f"📧 TASKWORLD_EMAIL: {'설정됨' if os.getenv('TASKWORLD_EMAIL') else '❌ 없음'}")
-    print(f"🔒 TASKWORLD_PASSWORD: {'설정됨' if os.getenv('TASKWORLD_PASSWORD') else '❌ 없음'}")
+    print(f"📧 TU_EMAIL: {'설정됨' if os.getenv('TU_EMAIL') else '❌ 없음'}")
+    print(f"🔒 TU_PASSWORD: {'설정됨' if os.getenv('TU_PASSWORD') else '❌ 없음'}")
     print(f"🤖 SLACK_BOT_TOKEN: {'설정됨' if os.getenv('SLACK_BOT_TOKEN') else '❌ 없음'}")
     print(f"💬 SLACK_CHANNEL: {os.getenv('SLACK_CHANNEL', '❌ 없음')}")
     print(f"💬 SLACK_CHANNEL_VALIDATION: {os.getenv('SLACK_CHANNEL_VALIDATION', '❌ 없음')}")
     
     print(f"\n🔍 설정값 확인:")
-    print(f"📂 워크스페이스: {WORKSPACE_NAME}")
     print(f"📄 출력 파일명: {OUTPUT_FILENAME}")
     print(f"⏱️ 최소 필수 시간: {MIN_REQUIRED_HOURS}시간")
     
@@ -1485,16 +1506,15 @@ if __name__ == "__main__":
         print("🚀 전체 프로세스 모드로 실행")
         
         # 환경변수에서 로그인 정보 읽기
-        email = os.getenv("TASKWORLD_EMAIL")
-        password = os.getenv("TASKWORLD_PASSWORD")
-        workspace = os.getenv("TASKWORLD_WORKSPACE", WORKSPACE_NAME)
+        email = os.getenv("TU_EMAIL")
+        password = os.getenv("TU_PASSWORD")
         
         if not email or not password:
-            print("❌ 환경변수 필요: TASKWORLD_EMAIL, TASKWORLD_PASSWORD")
+            print("❌ 환경변수 필요: TU_EMAIL, TU_PASSWORD")
             exit(1)
         
         downloader = TaskworldSeleniumDownloader(headless=DEFAULT_HEADLESS)
-        result = downloader.run_complete_automation(email, password, workspace)
+        result = downloader.run_complete_automation(email, password)
         
         if result:
             print(f"📁 최종 파일: {result}")
