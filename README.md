@@ -1,291 +1,203 @@
-# 🤖 아트실 리포트봇 (태스크월드 자동화)
+# 🤖 아트실 리포트봇 (TU 인트라넷 자동화)
 
-태스크월드 데이터를 자동으로 다운로드하고 검증하여 슬랙으로 전송하는 완전 자동화 봇
+TU 인트라넷 데이터를 자동으로 다운로드하고 검증하여 art 페이지에 업로드하는 완전 자동화 봇
 
 ## ✨ 주요 기능
 
-- 🌐 **태스크월드 자동 로그인 & 다운로드**: Selenium 기반 완전 자동화
+- 🌐 **TU 인트라넷 자동 로그인 & 다운로드**: Selenium 기반 완전 자동화
 - 🔍 **고급 데이터 검증**: 시간 합계 + 스마트 태그 검증 시스템
-- 📊 **데이터 필터링**: 불필요한 항목 자동 제외
-- 💬 **슬랙 자동 전송**: 파일 업로드 + 상세 검증 결과 리포트
-- ⚠️ **스마트 오류 감지**: 문제 발견 시 담당자 자동 멘션
-- 🏷️ **유연한 태그 검증**: 필수/선택적 두 번째 태그 지원
+- 📊 **데이터 처리**: 이메일 → 이름 변환, 연차/반차 자동 태그, 제외 대상 필터링
+- 📤 **art 페이지 자동 업로드**: 검증 통과 시 자동 업로드
+- 💬 **슬랙 오류 알림**: 검증 오류 또는 업로드 실패 시에만 알림
+- ⚠️ **스마트 오류 감지**: 문제 발견 시 담당자 이름 멘션
 
 ## 🎯 실행 모드
 
 ### 1. 전체 프로세스 (기본)
 ```bash
-python selenium_taskworld_downloader.py
+python tu_downloader.py
 ```
-- 다운로드 → 검증 → 파일 업로드 → 슬랙 전송
+- 다운로드 → 처리 → 검증 → art 페이지 업로드 → 오류 시 슬랙 알림
 
-### 2. 검증 전용 모드 ⭐ **개선됨**
+### 2. 검증 전용 모드
 ```bash
-python selenium_taskworld_downloader.py validation
+python tu_downloader.py validation
 ```
-- 다운로드 → 검증 → **검증 결과만 슬랙 전송** (파일 업로드 없음)
-- **최신 데이터로 검증**: 기존 파일이 아닌 실시간 다운로드
-- **빠른 검토**: 오류 발견 시 즉시 알림
+- 다운로드 → 처리 → 검증 → 검증 결과만 슬랙 전송 (업로드 없음)
+- 원본 파일(`export-아트실-...csv`)과 처리된 파일(`26_5.csv`) 모두 로컬에 저장
 
-## 📅 매월 필수 업데이트 사항
+## 📅 매월 필수 업데이트
 
-### 📂 `selenium_taskworld_downloader.py` 파일 수정
+### `tu_downloader.py` 상단 설정값 수정
 ```python
-# ==========================================
-# 📅 월별 설정 변수 (매월 수정 필요)
-# ==========================================
-WORKSPACE_NAME = "아트실 일정 - 2025 6주기"  # 🔄 한달마다 수정하세요!
-OUTPUT_FILENAME = "25_6.csv"  # 🔄 한달마다 수정하세요! (예: 25_7.csv, 25_8.csv)
+OUTPUT_FILENAME = "26_5.csv"   # 🔄 매월 수정 (예: 26_6.csv, 26_7.csv)
+MIN_REQUIRED_HOURS = 144       # 🔄 공휴일 제외한 실제 업무시간으로 수정
 ```
 
-**업데이트 예시:**
-- 6월 → 7월: `"아트실 일정 - 2025 7주기"`, `"25_7.csv"`
-- 7월 → 8월: `"아트실 일정 - 2025 8주기"`, `"25_8.csv"`
+## 📁 설정 파일 목록
 
-## 🏷️ 스마트 태그 검증 시스템 ⭐ **신규**
+| 파일명 | 설명 |
+|--------|------|
+| `email_map.txt` | 이메일 → 이름 매핑 |
+| `exclude_names.txt` | 검증 및 CSV에서 제외할 이름 |
+| `leave_keywords.txt` | 연차/반차류 Tasklist 키워드 |
+| `first_tags_required_second_art.txt` | 두 번째 태그가 필수인 첫 번째 태그 목록 |
+| `first_tags_optional_second.txt` | 두 번째 태그가 선택인 첫 번째 태그 목록 |
+| `second_tags_art.txt` | 허용되는 두 번째 태그 (아트류) |
+| `second_tags_project.txt` | 허용되는 두 번째 태그 (프로젝트류) |
 
-### 📋 `first_tags_required_second.txt` - 두 번째 태그 필수
-두 번째 태그가 **반드시 있어야 하는** 첫 번째 태그들
+### `email_map.txt`
+```
+# 형식: 이메일@도메인 : 이름
+jhee@aceproject.co.kr : 배진희
+```
+
+### `exclude_names.txt`
+```
+# 검증 및 CSV에서 제외할 이름 (한 줄에 하나)
+김찬준
+```
+
+### `leave_keywords.txt`
+```
+# 연차/반차류 Tasklist 키워드
+# 이 키워드에 해당하는 행은 Tags가 자동으로 '연차'로 설정됨
+# 새 카테고리 추가 시 여기에 추가
+연차
+반차
+오전반차
+오후반차
+생일
+시간차
+```
+
+### `first_tags_required_second_art.txt`
 ```
 # 두 번째 태그가 반드시 있어야 하는 첫 번째 태그들
-# 한 줄에 하나씩, 주석은 #으로 시작
-
+실업무
 cpm
 c-
 9up
 9-
 a1
-실업무
+netb
+fbc
 ```
 
-### 📋 `first_tags_optional_second.txt` - 두 번째 태그 선택적
-두 번째 태그가 **있어도 되고 없어도 되는** 첫 번째 태그들
+### `first_tags_optional_second.txt`
 ```
 # 두 번째 태그가 있어도 되고 없어도 되는 첫 번째 태그들
-# 한 줄에 하나씩, 주석은 #으로 시작
-
 공통업무
-공통작업
 연차
 사내행사
 공휴일
 ```
 
-### 📋 `second_tags.txt` - 두 번째 태그 목록
+## 🏷️ 태그 검증 시스템
+
+### 동작 방식
+1. **첫 번째 태그** 확인
+   - `first_tags_required_second_art.txt` 목록에 있으면 → 두 번째 태그 **필수**
+   - `first_tags_optional_second.txt` 목록에 있으면 → 두 번째 태그 **선택**
+   - 둘 다 없으면 → **오류**
+
+2. **두 번째 태그** 확인 (필수 그룹인 경우)
+   - `second_tags_art.txt` 또는 `second_tags_project.txt`에 있어야 함
+
+3. **연차 태그** (`Tags = "연차"`) → 태그 검증 제외
+
+4. **exclude_names** 에 포함된 이름 → 검증 및 CSV 모두 제외
+
+## 🔄 데이터 처리 흐름
+
 ```
-# 두 번째 태그로 허용되는 값들 (완전 일치)
-# 한 줄에 하나씩, 주석은 #으로 시작
-
-회의
-문서작업
-피드백
-교육
-
-ux
-ui
-ui에디팅
-ui연출
-2d연출
-카드
-2d리소스
-2d일러
-프로모션
-캐릭터컨셉
-배경컨셉
-프랍컨셉
-캐릭터3d
-배경3d
-프랍3d
-3d리소스
-캐릭터애니
-배경애니
-프랍애니
-3d연출
-기술서포트
-레벨링
-라이팅
-쉐이딩
-렌더링
+TU 인트라넷 CSV 다운로드
+  ↓
+이메일 → 이름 변환 (email_map.txt)
+  ↓
+exclude_names 제외
+  ↓
+연차/반차류 자동 태그 처리 (leave_keywords.txt)
+  ↓
+검증 (시간 합산 + 태그)
+  ↓
+검증 통과 → art 페이지 업로드
+검증 실패 → 슬랙 오류 알림 (업로드 안 함)
 ```
 
-### 📋 `exclude_values.txt` - 제외할 Tasklist 목록
-```
-# 제외할 Tasklist 값들 (한 줄에 하나씩)
-# 주석은 #으로 시작
+## 🛠️ GitHub Secrets 설정
 
-주요일정
-아트실
-UI팀
-리소스팀
-디자인팀
-TA팀
-```
+| Secret 이름 | 설명 |
+|------------|------|
+| `TU_EMAIL` | TU 인트라넷 로그인 이메일 |
+| `TU_PASSWORD` | TU 인트라넷 로그인 비밀번호 |
+| `TU_ART_ID` | art 페이지 Basic Auth 아이디 |
+| `TU_ART_PASSWORD` | art 페이지 Basic Auth 비밀번호 |
+| `SLACK_BOT_TOKEN` | 슬랙 봇 토큰 |
+| `SLACK_CHANNEL` | 전체 프로세스 슬랙 채널 |
+| `SLACK_CHANNEL_VALIDATION` | 검증 전용 슬랙 채널 |
 
-## 🛠️ 관리자 설정
+## 🤖 슬랙 봇 권한
 
-### 🔑 GitHub Secrets 설정
-| Secret 이름 | 설명 | 예시 |
-|------------|------|------|
-| `TASKWORLD_EMAIL` | 태스크월드 로그인 이메일 | `user@company.com` |
-| `TASKWORLD_PASSWORD` | 태스크월드 로그인 비밀번호 | `your_password` |
-| `SLACK_BOT_TOKEN` | 슬랙 봇 토큰 | `xoxb-xxx-xxx-xxx` |
-| `SLACK_CHANNEL` | 전체 프로세스 슬랙 채널 | `#art_teamleader` |
-| `SLACK_CHANNEL_VALIDATION` | 검증 전용 슬랙 채널 | `#아트실` |
-
-### 🤖 슬랙 봇 권한 설정
-슬랙 앱에서 다음 권한이 필요합니다:
 - `chat:write` - 메시지 전송
-- `files:write` - 파일 업로드
 - `channels:read` - 채널 목록 읽기
-
-### 📦 Python 의존성 (`requirements.txt`)
-```
-selenium==4.15.0
-pandas==2.1.3
-python-dotenv==1.0.0
-slack-sdk==3.23.0
-```
 
 ## ⏰ GitHub Actions 스케줄
 
-### 전체 프로세스 (매일 오전 7시)
+### 전체 프로세스 (평일 매일 오전 7시 KST)
 ```yaml
-# .github/workflows/generate-report.yml
-schedule:
-  - cron: '0 22 * * 0-4'  # UTC 22:00 = KST 07:00 (평일)
+cron: '0 22 * * 0-4'
 ```
 
-### 검증 프로세스 (하루 2회 자동 + 수동 실행)
+### 검증 프로세스 (평일 3회)
 ```yaml
-# .github/workflows/validation-check.yml
-schedule:
-  - cron: '50 7 * * 1-5'   # UTC 07:50 = KST 16:50 (평일)
-  - cron: '50 9 * * 1-5'   # UTC 09:50 = KST 18:50 (평일)
-workflow_dispatch:  # 수동 실행 가능
+cron: '23 7 * * 1-5'   # KST 16:23
+cron: '47 9 * * 1-5'   # KST 18:47
+cron: '17 13 * * 1-5'  # KST 22:17
 ```
 
-## 📊 출력 결과
+## 💬 슬랙 알림 기준
 
-### ✅ 전체 프로세스 성공 시
+| 상황 | 슬랙 알림 |
+|------|----------|
+| 정상 완료 | ❌ 없음 |
+| 검증 오류 발견 | ✅ 오류 목록 + 담당자 이름 + 수동 업데이트 요청 |
+| art 업로드 실패 | ✅ 업로드 실패 알림 |
+
+## 📦 의존성 (`requirements.txt`)
 ```
-[2025-07-01] 태스크월드 리포트 (아트실 일정 - 2025 6주기)
-✅ 파일 업로드 성공: 25_6.csv
+selenium
+pandas
+python-dotenv
+slack-sdk
 ```
-
-### ✅ 검증 전용 - 오류 없음
-```
-[태스크월드 검토] 오류 없음 👍
-```
-
-### ❌ 검증 오류 발견 시 ⭐ **개선됨**
-```
-[태스크월드 검토] 오류 발견 ☠️
-🧨 확인 필요한 사람 : 김철수, 이영희
-
-[오류 내용 확인]
-- 김철수님 합산 오류 (현재: 150시간, 기준: 160시간)
-- 이영희님 태그 오류 (두번째 태그 누락, '개발'는 두번째 태그 필수)
-- 이영희님 태그 오류 (두번째 태그: '잘못된태그')
-```
-
-## 🔍 검증 기준
-
-### 시간 검증
-- **기준**: 개인별 정확히 160시간 (설정 가능)
-- **그룹핑**: 이름 앞 3글자로 자동 그룹핑
-- **예시**: "김철수1", "김철수2" → "김철수" 그룹으로 합산
-
-### 스마트 태그 검증 ⭐ **신규**
-1. **첫 번째 태그**: 
-   - `first_tags_required_second.txt` 또는 `first_tags_optional_second.txt`에 있어야 함
-   - **부분 일치** 방식 (예: "개발" → "개발작업", "개발리뷰" 모두 허용)
-
-2. **두 번째 태그**:
-   - **필수 그룹**: 반드시 있어야 하고 `second_tags.txt`와 정확히 일치
-   - **선택적 그룹**: 있으면 `second_tags.txt`와 정확히 일치해야 함
-
-**검증 예시:**
-- `"개발, 상세개발"` → ✅ (개발=필수그룹, 상세개발=허용된 두번째 태그)
-- `"개발"` → ❌ (개발=필수그룹이므로 두번째 태그 필수)
-- `"회의, 팀회의"` → ✅ (회의=선택적그룹, 팀회의=허용된 두번째 태그)
-- `"회의"` → ✅ (회의=선택적그룹이므로 두번째 태그 없어도 OK)
 
 ## 🚨 문제 해결
 
-### 일반적인 오류들
+**로그인 실패**
+- `.env` 또는 GitHub Secrets의 `TU_EMAIL`, `TU_PASSWORD` 확인
 
-**1. 로그인 실패**
-- 태스크월드 계정 정보 확인
-- GitHub Secrets의 `TASKWORLD_EMAIL`, `TASKWORLD_PASSWORD` 확인
+**art 페이지 업로드 실패**
+- `TU_ART_ID`, `TU_ART_PASSWORD` 확인
 
-**2. 워크스페이스 접속 실패**
-- `WORKSPACE_NAME` 정확성 확인
-- 태스크월드에서 워크스페이스 이름 변경 여부 확인
+**슬랙 전송 실패**
+- `SLACK_BOT_TOKEN` 유효성 및 채널 확인
 
-**3. 슬랙 전송 실패**
-- 봇 토큰 유효성 확인
-- 채널 존재 여부 및 봇 권한 확인
-- GitHub Secrets의 `SLACK_BOT_TOKEN` 갱신
+**검증 오류**
+- 태그 설정 파일 업데이트
+- `MIN_REQUIRED_HOURS` 조정
 
-**4. 검증 오류**
-- 태그 설정 파일들 업데이트
-- 시간 기준값 조정 (`MIN_REQUIRED_HOURS`)
+**새 연차 카테고리 추가됨**
+- `leave_keywords.txt`에 한 줄 추가
 
-**5. 환경변수 오류** ⭐ **신규**
-- GitHub Actions 워크플로우 파일의 `env:` 섹션 확인
-- `validation-check.yml`에 모든 필요한 환경변수가 있는지 확인
+## 📝 매월 체크리스트
 
-### 로그 확인 방법
-GitHub Actions > 실행된 워크플로우 > 로그 상세 보기
-
-## 📝 업데이트 체크리스트
-
-### 매월 필수 (월초)
-- [ ] `WORKSPACE_NAME` 업데이트
-- [ ] `OUTPUT_FILENAME` 업데이트
-
-### 태그 정책 변경시 ⭐ **신규**
-- [ ] `first_tags_required_second.txt` - 두 번째 태그 필수인 첫 번째 태그들
-- [ ] `first_tags_optional_second.txt` - 두 번째 태그 선택적인 첫 번째 태그들  
-- [ ] `second_tags.txt` - 허용되는 두 번째 태그들
-- [ ] `exclude_values.txt` - 제외할 항목 추가/제거
-
-### 기타 설정 변경시
-- [ ] `MIN_REQUIRED_HOURS` - 시간 기준 변경
-- [ ] 슬랙 토큰 갱신 (만료시)
-- [ ] 태스크월드 계정 정보 업데이트
-
-### 환경 변경시
-- [ ] `requirements.txt` - 패키지 의존성 업데이트
-- [ ] GitHub Actions 스케줄 조정
-- [ ] 슬랙 채널 변경
-- [ ] GitHub Actions 워크플로우 환경변수 설정
-
-## 🆕 최근 업데이트 (v2.0)
-
-### ✨ 검증 전용 모드 개선
-- **최신 데이터 검증**: 기존 파일이 아닌 실시간 다운로드로 검증
-- **일관된 프로세스**: 전체 프로세스와 동일한 플로우, 파일 업로드만 제외
-
-### 🏷️ 스마트 태그 검증 시스템
-- **유연한 태그 정책**: 필수 vs 선택적 두 번째 태그 지원
-- **세분화된 설정**: 3개 파일로 태그 정책 관리
-- **자동 파일 생성**: 설정 파일이 없으면 기본값으로 자동 생성
-
-### 🔧 안정성 개선
-- **환경변수 처리 개선**: 워크플로우별 환경변수 설정 명확화
-- **오류 메시지 개선**: 더 구체적이고 실행 가능한 오류 안내
-- **자동 복구**: 필수 파일 누락 시 기본값으로 자동 생성
-
-## 🛠️ 개발자 정보
-
-- **개발**: 아트실 팀
-- **목적**: 태스크월드 리포팅 업무 자동화
-- **기술스택**: Python, Selenium, GitHub Actions, Slack API
-- **유지보수**: 매월 설정값 업데이트 + 태그 정책 관리
+- [ ] `OUTPUT_FILENAME` 업데이트 (예: `26_6.csv`)
+- [ ] `MIN_REQUIRED_HOURS` 업데이트 (공휴일 제외 실제 업무시간)
+- [ ] `email_map.txt` 신규 팀원 추가 여부 확인
 
 ## 🔗 관련 링크
 
-- [태스크월드](https://asia-enterprise.taskworld.com/)
+- [TU 인트라넷](https://tu.aceproject.co.kr)
 - [슬랙 앱 관리](https://api.slack.com/apps)
 - [GitHub Actions 문서](https://docs.github.com/en/actions)
