@@ -1008,7 +1008,13 @@ class TaskworldSeleniumDownloader:
                 self.send_validation_report_to_slack([error_msg], channel_env_var)
                 return False
             
-            # 6. 검증 결과 슬랙 전송 (파일 업로드 없음)
+            # 6. 검증 결과 터미널 출력 + 슬랙 전송
+            if validation_issues:
+                print(f"\n⚠️ 검증 이슈 {len(validation_issues)}개 발견:")
+                for issue in validation_issues:
+                    print(f"  - {issue}")
+            else:
+                print("\n✅ 검증 이슈 없음")
             success = self.send_validation_report_to_slack(validation_issues, channel_env_var)
 
             print(f"\n✅ 처리된 파일 로컬 저장: {processed_file}")
