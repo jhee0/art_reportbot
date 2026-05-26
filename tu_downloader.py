@@ -31,13 +31,13 @@ MIN_REQUIRED_HOURS = 144  # 필요시 수정하세요! (개인별 최소 시간)
 # 파일 경로 설정
 # ==========================================
 FIRST_TAGS_REQUIRED_ART_FILE = "first_tags_required_second_art.txt"
-FIRST_TAGS_REQUIRED_PROJECT_FILE = "first_tags_required_second_project.txt"
 FIRST_TAGS_OPTIONAL_SECOND_FILE = "first_tags_optional_second.txt"
 SECOND_TAGS_ART_FILE = "second_tags_art.txt"
 SECOND_TAGS_PROJECT_FILE = "second_tags_project.txt"
 EXCLUDE_VALUES_FILE = "exclude_values.txt"
 EMAIL_MAP_FILE = "email_map.txt"
-MANUAL_ENTRIES_FILE = "manual_entries.txt"
+EXCLUDE_NAMES_FILE = "exclude_names.txt"
+LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 
 # ==========================================
 # 기타 설정
@@ -164,62 +164,74 @@ class TaskworldSeleniumDownloader:
                         line = line.strip()
                         if not line or line.startswith('#'):
                             continue
-                        if ':' in line:
-                            parts = line.split(':', 1)
-                            email = parts[0].strip()
-                            name = parts[1].strip()
-                            email_map[email] = name
-                print(f"✅ 이메일 매핑 로드 완료: {len(email_map)}명 ({EMAIL_MAP_FILE})")
+                        parts = [p.strip() for p in line.split(':')]
+                        if len(parts) >= 2:
+                            email_map[parts[0]] = parts[1]
+                print(f"✅ 이메일 매핑 로드 완료: {len(email_map)}명")
                 return email_map
             else:
-                # 기본 파일 생성
                 print(f"⚠️ {EMAIL_MAP_FILE} 파일이 없습니다! 기본 파일을 생성합니다.")
                 with open(EMAIL_MAP_FILE, 'w', encoding='utf-8') as f:
-                    f.write("# 이메일 → 이름 매핑 (한 줄에 하나씩)\n")
+                    f.write("# 이메일 → 이름 매핑\n")
                     f.write("# 형식: 이메일@도메인 : 이름\n\n")
                     f.write("# jhee@aceproject.co.kr : 배진희\n")
-                print(f"✅ {EMAIL_MAP_FILE} 파일이 생성되었습니다. 매핑을 입력하세요.")
                 return {}
         except Exception as e:
             print(f"❌ 이메일 매핑 로드 실패: {e}")
             return {}
 
-    def load_manual_entries(self):
-        """수동 입력 행 로드 (manual_entries.txt)
-        형식: 이름, Task, Tags, Time Spent
-        예시: 배진희, 연차, 연차, 08:00:00
+    def load_leave_keywords(self):
+        """연차/반차류 Tasklist 키워드 로드 (leave_keywords.txt)
+        이 키워드에 해당하는 행은 Tags가 자동으로 "연차"로 설정됨
         """
         try:
-            if os.path.exists(MANUAL_ENTRIES_FILE):
-                entries = []
-                with open(MANUAL_ENTRIES_FILE, 'r', encoding='utf-8') as f:
+            if os.path.exists(LEAVE_KEYWORDS_FILE):
+                keywords = set()
+                with open(LEAVE_KEYWORDS_FILE, 'r', encoding='utf-8') as f:
                     for line in f:
-                        line = line.strip()
-                        if not line or line.startswith('#'):
-                            continue
-                        parts = [p.strip() for p in line.split(',')]
-                        if len(parts) == 4:
-                            entries.append({
-                                'Name': parts[0],
-                                'Task': parts[1],
-                                'Tags': parts[2],
-                                'Time Spent': parts[3]
-                            })
-                        else:
-                            print(f"⚠️ manual_entries.txt 형식 오류 (4개 값 필요): {line}")
-                print(f"✅ 수동 입력 행 로드 완료: {len(entries)}행 ({MANUAL_ENTRIES_FILE})")
-                return entries
+                        kw = line.strip()
+                        if kw and not kw.startswith('#'):
+                            keywords.add(kw)
+                print(f"✅ 연차 키워드 로드: {len(keywords)}개 → {keywords}")
+                return keywords
             else:
-                print(f"ℹ️ {MANUAL_ENTRIES_FILE} 없음, 수동 입력 없이 진행")
-                with open(MANUAL_ENTRIES_FILE, 'w', encoding='utf-8') as f:
-                    f.write("# 수동 입력 행 (연차, 공휴일 등)\n")
-                    f.write("# 형식: 이름, Task, Tags, Time Spent\n")
-                    f.write("# 예시: 배진희, 연차, 연차, 08:00:00\n\n")
-                print(f"✅ {MANUAL_ENTRIES_FILE} 템플릿 생성 완료")
-                return []
+                # 기본값으로 파일 생성
+                defaults = ["연차", "반차", "오전반차", "오후반차", "생일", "시간차", "공휴일"]
+                with open(LEAVE_KEYWORDS_FILE, 'w', encoding='utf-8') as f:
+                    f.write("# 연차/반차류 Tasklist 키워드 (한 줄에 하나)\n")
+                    f.write("# 이 키워드에 해당하는 행은 Tags가 자동으로 '연차'로 설정됨\n\n")
+                    for kw in defaults:
+                        f.write(f"{kw}\n")
+                print(f"✅ {LEAVE_KEYWORDS_FILE} 기본 파일 생성 완료")
+                return set(defaults)
         except Exception as e:
-            print(f"❌ 수동 입력 행 로드 실패: {e}")
-            return []
+            print(f"❌ 연차 키워드 로드 실패: {e}")
+            return set(["연차", "반차", "오전반차", "오후반차", "생일", "시간차", "공휴일"])
+
+    def load_exclude_names(self):
+        """검증에서 제외할 이름 목록 로드 (exclude_names.txt)
+        형식: 한 줄에 이름 하나
+        예시: 김찬준
+        """
+        try:
+            if os.path.exists(EXCLUDE_NAMES_FILE):
+                exclude_names = set()
+                with open(EXCLUDE_NAMES_FILE, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        name = line.strip()
+                        if name and not name.startswith('#'):
+                            exclude_names.add(name)
+                print(f"✅ 검증 제외 이름 로드: {len(exclude_names)}명 → {exclude_names}")
+                return exclude_names
+            else:
+                with open(EXCLUDE_NAMES_FILE, 'w', encoding='utf-8') as f:
+                    f.write("# 검증에서 제외할 이름 목록 (한 줄에 하나)\n")
+                    f.write("# 예시: 김찬준\n")
+                print(f"✅ {EXCLUDE_NAMES_FILE} 템플릿 생성 완료")
+                return set()
+        except Exception as e:
+            print(f"❌ 검증 제외 이름 로드 실패: {e}")
+            return set()
 
     def login_to_taskworld(self, email, password):
         """TU 인트라넷 로그인 (이메일 + 비밀번호)"""
@@ -518,33 +530,24 @@ class TaskworldSeleniumDownloader:
 
     
     def load_allowed_tags(self):
-        """허용된 태그 목록 파일에서 로드 - 아트/프로젝트 구조"""
+        """허용된 태그 목록 파일에서 로드"""
         try:
-            # 아트 그룹 첫 번째 태그 (두 번째 태그 필수)
+            # 첫 번째 태그 (두 번째 태그 필수) — art 파일 하나로 통합
             try:
                 with open(FIRST_TAGS_REQUIRED_ART_FILE, 'r', encoding='utf-8') as f:
                     first_tags_required_art = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+                print(f"✅ 필수 첫번째 태그 로드: {len(first_tags_required_art)}개")
             except FileNotFoundError:
                 default_art = ["cpm", "9up", "c-"]
-                with open('first_tags_required_second_art.txt', 'w', encoding='utf-8') as f:
-                    f.write("# 아트 그룹: 두 번째 태그가 반드시 있어야 하는 첫 번째 태그들\n")
+                with open(FIRST_TAGS_REQUIRED_ART_FILE, 'w', encoding='utf-8') as f:
+                    f.write("# 두 번째 태그가 반드시 있어야 하는 첫 번째 태그들\n")
                     f.write("# 한 줄에 하나씩, 주석은 #으로 시작\n\n")
                     for tag in default_art:
                         f.write(f"{tag}\n")
                 first_tags_required_art = default_art
 
-            # 프로젝트 그룹 첫 번째 태그 (두 번째 태그 필수)
-            try:
-                with open('first_tags_required_second_project.txt', 'r', encoding='utf-8') as f:
-                    first_tags_required_project = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
-            except FileNotFoundError:
-                default_project = ["a1", "실업무", "9-"]
-                with open('first_tags_required_second_project.txt', 'w', encoding='utf-8') as f:
-                    f.write("# 프로젝트 그룹: 두 번째 태그가 반드시 있어야 하는 첫 번째 태그들\n")
-                    f.write("# 한 줄에 하나씩, 주석은 #으로 시작\n\n")
-                    for tag in default_project:
-                        f.write(f"{tag}\n")
-                first_tags_required_project = default_project
+            # project는 art와 동일하게 처리 (파일 통합됨)
+            first_tags_required_project = first_tags_required_art
             
             # 두 번째 태그 선택적인 첫 번째 태그들 (기존과 동일)
             try:
@@ -591,7 +594,7 @@ class TaskworldSeleniumDownloader:
             print(f"❌ 태그 설정 파일 읽기 실패: {e}")
             exit(1)
 
-    def validate_tags(self, df, first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project):
+    def validate_tags(self, df, first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project, exclude_names=None):
         """C열 태그 검증 - 개선된 로직"""
         
         first_tags_required_second = first_tags_required_art + first_tags_required_project
@@ -622,6 +625,14 @@ class TaskworldSeleniumDownloader:
                     person_group = '미분류'
                 else:
                     person_group = str(person_name).strip()
+
+                # 검증 제외 대상 스킵
+                if exclude_names and person_group in exclude_names:
+                    continue
+
+                # 연차 태그는 태그 검증 제외
+                if str(tags).strip() == '연차':
+                    continue
 
                 # 태그가 비어있거나 NaN인 경우 오류 추가
                 if pd.isna(tags) or tags == '' or tags == 0:
@@ -709,12 +720,15 @@ class TaskworldSeleniumDownloader:
 
             # 1. 태그 설정 로드
             first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project = self.load_allowed_tags()
-            
-            # 2. 시간 검증
-            validation_issues = self._validate_time_totals(df, min_hours)
-            
-            # 3. 태그 검증
-            tag_issues = self.validate_tags(df, first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project)
+
+            # 2. 검증 제외 이름 로드
+            exclude_names = self.load_exclude_names()
+
+            # 3. 시간 검증
+            validation_issues = self._validate_time_totals(df, min_hours, exclude_names)
+
+            # 4. 태그 검증
+            tag_issues = self.validate_tags(df, first_tags_required_art, first_tags_required_project, first_tags_optional_second, second_tags_art, second_tags_project, exclude_names)
             
             # 검증 결과 합치기
             all_issues = validation_issues + tag_issues
@@ -731,7 +745,7 @@ class TaskworldSeleniumDownloader:
             print(traceback.format_exc())
             return [error_msg]
     
-    def _validate_time_totals(self, df, min_hours):
+    def _validate_time_totals(self, df, min_hours, exclude_names=None):
         """시간 합계 검증"""
         validation_issues = []
         
@@ -794,6 +808,9 @@ class TaskworldSeleniumDownloader:
         for name_group, total_hours in group_totals.items():
             total_hours = round(total_hours, 1)
             
+            if exclude_names and name_group in exclude_names:
+                print(f"  ⏭️ 합산 검증 제외: {name_group}")
+                continue
             if total_hours != min_hours:
                 issue_msg = f"{name_group}님 합산 오류 (현재: {total_hours}시간, 기준: {min_hours}시간)"
                 validation_issues.append(issue_msg)
@@ -851,12 +868,26 @@ class TaskworldSeleniumDownloader:
 
             final_df = df_filtered[final_columns].copy()
 
-            # 수동 입력 행 추가 (연차, 공휴일 등) — 검증 전에 추가해서 시간 합산에 포함
-            manual_entries = self.load_manual_entries()
-            if manual_entries:
-                manual_df = pd.DataFrame(manual_entries, columns=['Name', 'Task', 'Tags', 'Time Spent'])
-                final_df = pd.concat([final_df, manual_df], ignore_index=True)
-                print(f"✅ 수동 입력 {len(manual_entries)}행 추가 완료")
+            # exclude_names에 포함된 이름은 CSV에서 제외
+            exclude_names_for_csv = self.load_exclude_names()
+            if exclude_names_for_csv:
+                before = len(final_df)
+                final_df = final_df[~final_df['Name'].isin(exclude_names_for_csv)]
+                removed = before - len(final_df)
+                if removed > 0:
+                    print(f"✅ 제외 이름 필터링: {removed}행 제거 ({exclude_names_for_csv})")
+
+            # 연차/반차류 행 자동 태그 처리
+            # Tasklist가 연차 키워드인 행 → Task를 Tasklist 값으로, Tags를 "연차"로 설정
+            leave_keywords = self.load_leave_keywords()
+            leave_count = 0
+            for idx in final_df.index:
+                if idx in df.index and df.loc[idx, 'Tasklist'] in leave_keywords:
+                    final_df.at[idx, 'Task'] = df.loc[idx, 'Tasklist']
+                    final_df.at[idx, 'Tags'] = '연차'
+                    leave_count += 1
+            if leave_count > 0:
+                print(f"✅ 연차/반차 자동 태그 처리: {leave_count}행")
 
             # 검증 (수동 입력 포함된 df로 검증)
             validation_issues = self.validate_csv_data(final_df.copy(), min_hours=MIN_REQUIRED_HOURS)
@@ -894,16 +925,14 @@ class TaskworldSeleniumDownloader:
                 people_list = ", ".join(mentioned_people)
                 message_text += f"\n🧨 확인 필요한 사람 : {people_list}"
                 message_text += f"\n```[오류 내용 확인]"
-                
                 for issue in validation_issues:
                     message_text += f"\n- {issue}"
                 message_text += f"```"
-                
+
                 msg_response = self.slack_client.chat_postMessage(
                     channel=validation_channel,
                     text=message_text
                 )
-                
                 if msg_response.get('ok'):
                     return True
                 else:
@@ -981,23 +1010,13 @@ class TaskworldSeleniumDownloader:
             
             # 6. 검증 결과 슬랙 전송 (파일 업로드 없음)
             success = self.send_validation_report_to_slack(validation_issues, channel_env_var)
-            
-            # 7. 파일 정리
-            try:
-                if os.path.exists(csv_file):
-                    os.remove(csv_file)
-                
-                downloads_pattern = os.path.expanduser("~/Downloads/export-projects*.csv")
-                downloads_files = glob.glob(downloads_pattern)
-                for file in downloads_files:
-                    try:
-                        os.remove(file)
-                    except:
-                        pass
-                        
-            except Exception as e:
-                pass
-            
+
+            print(f"\n✅ 처리된 파일 로컬 저장: {processed_file}")
+            print(f"📁 파일 위치: {os.path.abspath(processed_file)}")
+
+            # 7. 파일 정리 없음 — 원본 + 처리된 파일 모두 유지 (검토용)
+            print(f"📁 원본 파일: {os.path.abspath(csv_file)}")
+
             if success:
                 return True
             else:
@@ -1394,39 +1413,56 @@ class TaskworldSeleniumDownloader:
                 print("✅ 모든 데이터 검증 통과")
             
             
-            # 6. art 페이지에 CSV 업로드
+            # 6. art 페이지 CSV 업로드 — 검증 오류 있으면 건너뜀
             print("\n6️⃣ art 페이지 CSV 업로드...")
-            art_success = self.upload_to_art_page(processed_file)
-            if art_success:
-                print("✅ art 페이지 업로드 완료!")
+            today_str = datetime.now(self.korea_tz).strftime("%Y-%m-%d")
+
+            if validation_issues:
+                print("⚠️ 검증 오류 있음 — art 업로드 건너뜀, 슬랙에 수동 업데이트 요청")
+                art_success = False
+                art_skipped = True
             else:
-                print("❌ art 페이지 업로드 실패 — 슬랙에 오류 알림")
+                art_skipped = False
+                art_success = self.upload_to_art_page(processed_file)
+                if art_success:
+                    print("✅ art 페이지 업로드 완료!")
+                else:
+                    print("❌ art 페이지 업로드 실패 — 슬랙에 오류 알림")
 
             # 7. 슬랙 노티 — 오류/실패 시에만 전송
             print("\n7️⃣ 슬랙 노티 확인...")
-            today_str = datetime.now(self.korea_tz).strftime("%Y-%m-%d")
-            needs_notify = not art_success or bool(validation_issues)
+            needs_notify = art_skipped or not art_success
 
             if not needs_notify:
                 print("✅ 오류 없음 — 슬랙 노티 생략")
             else:
-                if not art_success:
-                    notify_msg = f"[{today_str}] ❌ art 페이지 CSV 업로드 실패"
-                else:
-                    notify_msg = f"[{today_str}] ⚠️ 검증 오류 발견"
+                # 검증 오류 담당자 추출 (이름 → 슬랙 태그)
+                if art_skipped and validation_issues:
+                    # 오류 담당자 이름 추출
+                    error_names = set()
+                    for issue in validation_issues:
+                        if '님' in issue:
+                            name_part = issue.split('님')[0].strip().split()[-1]
+                            error_names.add(name_part)
+
+                    people_list = ", ".join(sorted(error_names))
+                    notify_msg = f"[{today_str}] ⚠️ 검증 오류 발견 — 확인 후 수동 업데이트 해주세요."
+                    if people_list:
+                        notify_msg += f"\n🧨 확인 필요한 사람 : {people_list}"
                     notify_msg += "\n```\n[검증 오류]"
                     for issue in validation_issues:
                         notify_msg += f"\n- {issue}"
                     notify_msg += "\n```"
+                else:
+                    notify_msg = f"[{today_str}] ❌ art 페이지 CSV 업로드 실패"
 
-                print(notify_msg)  # 터미널에도 동일 출력
+                print(notify_msg)
 
                 if self.slack_client:
                     success = self.send_to_slack(
-                        None,
-                        None,
-                        "art 페이지 업로드 실패" if not art_success else None,
-                        validation_issues if art_success else None
+                        None, None,
+                        None if art_skipped else "art 페이지 업로드 실패",
+                        validation_issues if art_skipped else None
                     )
                     if success:
                         print("✅ 슬랙 노티 전송 완료!")
