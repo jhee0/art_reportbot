@@ -1207,15 +1207,15 @@ class TaskworldSeleniumDownloader:
 
             if error_message:
                 message_text += f"\n❌ 오류 발생: `{error_message}`"
+            elif validation_issues:
+                message_text += f"\n⚠️ 검증 오류 발견으로 통계 CSV가 업데이트 되지 않습니다."
+                message_text += f"\n```"
+                message_text += f"\n[검증 오류]"
+                for issue in validation_issues:
+                    message_text += f"\n- {issue}"
+                message_text += f"\n```"
             else:
                 message_text += f"\n✅ 통계 CSV 업데이트 완료"
-
-                if validation_issues:
-                    message_text += f"\n```"
-                    message_text += f"\n[검증 오류]"
-                    for issue in validation_issues:
-                        message_text += f"\n- {issue}"
-                    message_text += f"\n```"
 
             msg_response = self.slack_client.chat_postMessage(
                 channel=actual_channel_id,
