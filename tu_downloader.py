@@ -860,6 +860,23 @@ class TaskworldSeleniumDownloader:
             removed_count = 0
             print(f"📊 전체 행 수: {len(df_filtered)}")
 
+            # Status가 Completed이면서 첫번째 태그가 '공통업무'인 경우 검증 (필터링 전)
+            status_completed_tag_issues = []
+            if 'Status' in df_filtered.columns and 'Tags' in df_filtered.columns:
+                for idx, row in df_filtered.iterrows():
+                    if str(row.get('Status', '')).strip() == 'Completed':
+                        tags = row.get('Tags')
+                        if pd.isna(tags) or str(tags).strip() in ('', 'nan'):
+                            continue
+                        first_tag = str(tags).split(',')[0].strip()
+                        if first_tag.startswith('공통업무'):
+                            name = str(row.get('Name', '')).strip() or '미분류'
+                            task_name = str(row.get('Task', ''))
+                            task_display = task_name[:20] + "..." if len(task_name) > 20 else task_name
+                            issue_msg = f"{name}님 태그 오류 : {task_display} (완료된 업무에 '공통업무' 태그 불가)"
+                            if issue_msg not in status_completed_tag_issues:
+                                status_completed_tag_issues.append(issue_msg)
+
             # 최종 4열: Name, Task, Tags, Time Spent
             final_columns = ['Name', 'Task', 'Tags', 'Time Spent']
             missing_columns = [col for col in final_columns if col not in df_filtered.columns]
@@ -894,6 +911,9 @@ class TaskworldSeleniumDownloader:
             # 담당자 없음 오류 추가
             if assigned_warnings:
                 validation_issues = assigned_warnings + validation_issues
+            # Status Completed + 공통업무 태그 오류 추가
+            if status_completed_tag_issues:
+                validation_issues = status_completed_tag_issues + validation_issues
 
             # 파일 저장
             output_file = OUTPUT_FILENAME
