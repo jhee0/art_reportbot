@@ -36,6 +36,7 @@ jobs:
         TU_ART_PASSWORD: ${{ secrets.TU_ART_PASSWORD }}
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+        TZ: Asia/Seoul
       run: |
         python tu_downloader.py
         

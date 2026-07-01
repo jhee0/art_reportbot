@@ -2,12 +2,9 @@ name: validation-check
 
 on:
   schedule:
-    # 한국시간 평일 오후 4:30 (UTC 07:30) → 트래픽 회피
-    - cron: '23 7 * * 1-5'   # 월-금 KST 16:23 1차
-    # 한국시간 평일 오후 7:00 (UTC 10:00) → 트래픽 회피  
-    - cron: '47 9 * * 1-5'   # 월-금 KST 18:47 2차
-    # 한국시간 평일 저녁 10:00 (UTC 13:00) → 트래픽 회피
-    - cron: '17 13 * * 1-5'  # 월-금 KST 22:17 3차
+    - cron: '0 7 * * 1-5'   # 월-금 KST 16:00
+    - cron: '0 10 * * 1-5'  # 월-금 KST 19:00
+    - cron: '0 13 * * 1-5'  # 월-금 KST 22:00
   
   # 수동 실행도 가능하게
   workflow_dispatch:
@@ -39,6 +36,7 @@ jobs:
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
         SLACK_CHANNEL_VALIDATION: ${{ secrets.SLACK_CHANNEL_VALIDATION }}
+        TZ: Asia/Seoul
       run: |
         python tu_downloader.py validation
         
