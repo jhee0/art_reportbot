@@ -909,8 +909,9 @@ class TaskworldSeleniumDownloader:
             leave_count = 0
             for idx in final_df.index:
                 if idx in df.index and df.loc[idx, 'Tasklist'] in leave_keywords:
-                    final_df.at[idx, 'Task'] = df.loc[idx, 'Tasklist']
-                    final_df.at[idx, 'Tags'] = '연차'
+                    tasklist_val = df.loc[idx, 'Tasklist']
+                    final_df.at[idx, 'Task'] = '사내행사' if tasklist_val == '행사공결' else tasklist_val
+                    final_df.at[idx, 'Tags'] = '사내행사' if tasklist_val == '행사공결' else '연차'
                     leave_count += 1
             if leave_count > 0:
                 print(f"✅ 연차/반차 자동 태그 처리: {leave_count}행")
