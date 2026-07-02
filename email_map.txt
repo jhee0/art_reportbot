@@ -5,3 +5,4 @@ potato@aceproject.co.kr : 장진서
 jhee@aceproject.co.kr : 배진희
 shlee@aceproject.co.kr : 이상훈
 odradek@aceproject.co.kr : 김찬준
+newdesign@aceproject.co.kr : 신입디자이너
