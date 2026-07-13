@@ -1073,7 +1073,7 @@ class TaskworldSeleniumDownloader:
                 self.driver.quit()
 
     def upload_to_art_page(self, csv_file_path):
-        """tu.aceproject.co.kr/art/ 에 CSV 파일 업로드"""
+        """fbcweb.aceproject.co.kr/stats/ 에 CSV 파일 업로드"""
         art_email = os.getenv("TU_ART_ID")
         art_password = os.getenv("TU_ART_PASSWORD")
 
@@ -1104,7 +1104,7 @@ class TaskworldSeleniumDownloader:
             import urllib.parse
             art_id_encoded = urllib.parse.quote(art_email, safe='')
             art_pw_encoded = urllib.parse.quote(art_password, safe='')
-            art_url = f"https://{art_id_encoded}:{art_pw_encoded}@tu.aceproject.co.kr/art/"
+            art_url = f"https://{art_id_encoded}:{art_pw_encoded}@fbcweb.aceproject.co.kr/stats/"
             art_driver.get(art_url)
             time.sleep(3)
             print("  ✅ art 페이지 이동 완료")
