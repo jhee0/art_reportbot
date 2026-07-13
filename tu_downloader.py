@@ -51,7 +51,7 @@ LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True
+DEFAULT_HEADLESS = False
 
 logger = logging.getLogger(__name__)
 
@@ -1117,14 +1117,8 @@ class TaskworldSeleniumDownloader:
             art_driver = webdriver.Chrome(options=art_options)
             art_wait = WebDriverWait(art_driver, 30)
 
-            # 1단계: Basic Auth — URL에 인증 정보 포함 (브라우저 팝업 방식)
-            print("  🔑 art 페이지 Basic Auth 로그인 준비...")
-
-            # 2단계: /art/ 페이지 이동 (Basic Auth를 URL에 포함)
-            import urllib.parse
-            art_id_encoded = urllib.parse.quote(art_email, safe='')
-            art_pw_encoded = urllib.parse.quote(art_password, safe='')
-            art_url = f"https://{art_id_encoded}:{art_pw_encoded}@fbcweb.aceproject.co.kr/stats/"
+            # 1단계: /stats/ 페이지 이동 (Basic Auth 해제됨, 인증 정보 불필요)
+            art_url = "https://fbcweb.aceproject.co.kr/stats/"
             art_driver.get(art_url)
             time.sleep(3)
             print(f"  ✅ art 페이지 이동 완료 (현재 URL: {art_driver.current_url})")
