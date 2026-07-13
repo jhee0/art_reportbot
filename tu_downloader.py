@@ -1074,12 +1074,20 @@ class TaskworldSeleniumDownloader:
 
     def _dump_debug_info(self, driver, label):
         """실패 시 현재 URL/스크린샷/페이지 소스 일부를 남겨 원인(네트워크 차단 vs 셀렉터) 구분"""
+        import re
         try:
             print(f"  🔎 [DEBUG:{label}] 현재 URL: {driver.current_url}")
             screenshot_path = f"debug_{label}.png"
             driver.save_screenshot(screenshot_path)
             print(f"  🔎 [DEBUG:{label}] 스크린샷 저장: {os.path.abspath(screenshot_path)}")
-            page_snippet = driver.page_source[:1500].replace("\n", " ")
+
+            source = driver.page_source
+            # 크롬 net::ERR_* 네트워크 에러 코드 탐지 (연결 실패 페이지인지 확인)
+            err_match = re.search(r'ERR_[A-Z_]+', source)
+            if err_match:
+                print(f"  🔎 [DEBUG:{label}] ⚠️ 크롬 네트워크 에러 감지: {err_match.group()}")
+
+            page_snippet = source[:1500].replace("\n", " ")
             print(f"  🔎 [DEBUG:{label}] page_source 앞부분: {page_snippet}")
         except Exception as e:
             print(f"  🔎 [DEBUG:{label}] 디버그 정보 수집 실패: {e}")
@@ -1219,7 +1227,7 @@ class TaskworldSeleniumDownloader:
         except Exception as e:
             import traceback
             import traceback
-            print(f"❌ art 페이지 업로드 실패: {e}")
+            print(f"❌ 통계 업로드 실패: {e}")
             print(f"[상세 오류]\n{traceback.format_exc()}")
             print(traceback.format_exc())
             return False
@@ -1485,7 +1493,7 @@ class TaskworldSeleniumDownloader:
                 if art_success:
                     print("✅ art 페이지 업로드 완료!")
                 else:
-                    print("❌ art 페이지 업로드 실패 — 슬랙에 오류 알림")
+                    print("❌ 통계 업로드 실패 — 슬랙에 오류 알림")
 
             # 7. 슬랙 노티 — 오류/실패 시에만 전송
             print("\n7️⃣ 슬랙 노티 확인...")
@@ -1512,22 +1520,24 @@ class TaskworldSeleniumDownloader:
                         notify_msg += f"\n- {issue}"
                     notify_msg += "\n```"
                 else:
-                    notify_msg = f"[{today_str}] ❌ art 페이지 CSV 업로드 실패"
+                    notify_msg = f"[{today_str}] ❌ 통계 업로드 실패"
 
                 print(notify_msg)
 
-                if self.slack_client:
-                    success = self.send_to_slack(
-                        None, None,
-                        None if art_skipped else "art 페이지 업로드 실패",
-                        validation_issues if art_skipped else None
-                    )
-                    if success:
-                        print("✅ 슬랙 노티 전송 완료!")
-                    else:
-                        print("❌ 슬랙 전송 실패")
-                else:
-                    print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
+                # TODO: art 페이지 업로드 네트워크 이슈 완전히 수정되기 전까지 슬랙 노티 임시 중단
+                # if self.slack_client:
+                #     success = self.send_to_slack(
+                #         None, None,
+                #         None if art_skipped else "통계 업로드 실패",
+                #         validation_issues if art_skipped else None
+                #     )
+                #     if success:
+                #         print("✅ 슬랙 노티 전송 완료!")
+                #     else:
+                #         print("❌ 슬랙 전송 실패")
+                # else:
+                #     print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
+                print("⏸️ 슬랙 노티 임시 비활성화 (art 업로드 수정 중)")
             
             # 8. 파일 정리
             print("\n8️⃣ 파일 정리...")
