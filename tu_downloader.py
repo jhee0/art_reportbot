@@ -1072,6 +1072,18 @@ class TaskworldSeleniumDownloader:
             if self.driver:
                 self.driver.quit()
 
+    def _dump_debug_info(self, driver, label):
+        """실패 시 현재 URL/스크린샷/페이지 소스 일부를 남겨 원인(네트워크 차단 vs 셀렉터) 구분"""
+        try:
+            print(f"  🔎 [DEBUG:{label}] 현재 URL: {driver.current_url}")
+            screenshot_path = f"debug_{label}.png"
+            driver.save_screenshot(screenshot_path)
+            print(f"  🔎 [DEBUG:{label}] 스크린샷 저장: {os.path.abspath(screenshot_path)}")
+            page_snippet = driver.page_source[:1500].replace("\n", " ")
+            print(f"  🔎 [DEBUG:{label}] page_source 앞부분: {page_snippet}")
+        except Exception as e:
+            print(f"  🔎 [DEBUG:{label}] 디버그 정보 수집 실패: {e}")
+
     def upload_to_art_page(self, csv_file_path):
         """fbcweb.aceproject.co.kr/stats/ 에 CSV 파일 업로드"""
         art_email = os.getenv("TU_ART_ID")
@@ -1107,7 +1119,7 @@ class TaskworldSeleniumDownloader:
             art_url = f"https://{art_id_encoded}:{art_pw_encoded}@fbcweb.aceproject.co.kr/stats/"
             art_driver.get(art_url)
             time.sleep(3)
-            print("  ✅ art 페이지 이동 완료")
+            print(f"  ✅ art 페이지 이동 완료 (현재 URL: {art_driver.current_url})")
 
             # 3단계: 'CSV 업로드' 버튼 클릭 (a[href='upload'])
             csv_upload_selectors = [
@@ -1129,6 +1141,7 @@ class TaskworldSeleniumDownloader:
 
             if not csv_btn:
                 print("  ❌ CSV 업로드 버튼을 찾지 못함")
+                self._dump_debug_info(art_driver, "csv_btn_not_found")
                 return False
 
             try:
@@ -1157,6 +1170,7 @@ class TaskworldSeleniumDownloader:
 
             if not file_input:
                 print("  ❌ 파일 input 요소를 찾지 못함")
+                self._dump_debug_info(art_driver, "file_input_not_found")
                 return False
 
             # hidden input도 send_keys 가능하게 처리
@@ -1189,6 +1203,7 @@ class TaskworldSeleniumDownloader:
                     print(f"  ❌ 업로드 버튼이 비활성화 상태로 남아있음 (주기 자동 감지 실패 추정), disabled={disabled_btn.get_attribute('disabled')}")
                 except:
                     print("  ❌ 업로드 버튼을 찾지 못함")
+                self._dump_debug_info(art_driver, "upload_btn_not_found")
                 return False
 
             try:
