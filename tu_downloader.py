@@ -1109,12 +1109,12 @@ class TaskworldSeleniumDownloader:
             time.sleep(3)
             print("  ✅ art 페이지 이동 완료")
 
-            # 3단계: 'CSV 업로드' 버튼 클릭
+            # 3단계: 'CSV 업로드' 버튼 클릭 (a[href='upload'])
             csv_upload_selectors = [
-                "//button[contains(text(), 'CSV 업로드')]",
-                "//button[contains(text(), 'CSV')]",
+                "//a[@href='upload']",
+                "//a[contains(@href, 'upload')]",
                 "//*[contains(text(), 'CSV 업로드')]",
-                "//a[contains(text(), 'CSV 업로드')]",
+                "//button[contains(text(), 'CSV')]",
             ]
             csv_btn = None
             for selector in csv_upload_selectors:
@@ -1141,6 +1141,7 @@ class TaskworldSeleniumDownloader:
             # 4단계: 파일 input에 파일 경로 전달 (드래그앤드롭 영역)
             abs_path = os.path.abspath(csv_file_path)
             file_input_selectors = [
+                "//input[@id='fileInput']",
                 "//input[@type='file']",
                 "//input[contains(@accept, 'csv') or contains(@accept, '.csv')]",
             ]
@@ -1164,8 +1165,9 @@ class TaskworldSeleniumDownloader:
             time.sleep(2)
             print(f"  ✅ 파일 선택 완료: {os.path.basename(abs_path)}")
 
-            # 5단계: 업로드 버튼 클릭
+            # 5단계: 업로드 버튼 클릭 (파일 선택 후 JS가 주기를 자동 감지해야 disabled가 풀림)
             upload_btn_selectors = [
+                "//button[@id='submitBtn']",
                 "//button[text()='업로드']",
                 "//button[contains(text(), '업로드')]",
                 "//*[text()='업로드']",
@@ -1173,7 +1175,7 @@ class TaskworldSeleniumDownloader:
             upload_btn = None
             for selector in upload_btn_selectors:
                 try:
-                    upload_btn = WebDriverWait(art_driver, 8).until(
+                    upload_btn = WebDriverWait(art_driver, 10).until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
                     break
@@ -1181,7 +1183,12 @@ class TaskworldSeleniumDownloader:
                     continue
 
             if not upload_btn:
-                print("  ❌ 업로드 버튼을 찾지 못함")
+                # 버튼은 존재하지만 여전히 disabled인 경우(주기 자동 감지 실패)를 구분해서 로그
+                try:
+                    disabled_btn = art_driver.find_element(By.XPATH, "//button[@id='submitBtn']")
+                    print(f"  ❌ 업로드 버튼이 비활성화 상태로 남아있음 (주기 자동 감지 실패 추정), disabled={disabled_btn.get_attribute('disabled')}")
+                except:
+                    print("  ❌ 업로드 버튼을 찾지 못함")
                 return False
 
             try:
