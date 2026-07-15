@@ -2,6 +2,7 @@
 import os
 import time
 import glob
+import requests
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -51,7 +52,10 @@ LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = False
+DEFAULT_HEADLESS = True
+
+# TODO: 통계 업로드(requests 전환) 테스트 중 — 확실하게 고쳐지기 전까지 슬랙 오류 노티 전체 중단
+DISABLE_SLACK_NOTIFICATIONS = True
 
 logger = logging.getLogger(__name__)
 
@@ -939,6 +943,10 @@ class TaskworldSeleniumDownloader:
 
     def send_validation_report_to_slack(self, validation_issues, channel_env_var="SLACK_CHANNEL_VALIDATION"):
         """검증 결과를 슬랙에 전송 (파일 업로드 없이) - 오류가 있을 때만 전송"""
+        if DISABLE_SLACK_NOTIFICATIONS:
+            print("⏸️ 슬랙 노티 임시 비활성화 (테스트 중)")
+            return True
+
         if not self.slack_client:
             return False
         
@@ -1072,166 +1080,51 @@ class TaskworldSeleniumDownloader:
             if self.driver:
                 self.driver.quit()
 
-    def _dump_debug_info(self, driver, label):
-        """실패 시 현재 URL/스크린샷/페이지 소스 일부를 남겨 원인(네트워크 차단 vs 셀렉터) 구분"""
-        import re
-        try:
-            print(f"  🔎 [DEBUG:{label}] 현재 URL: {driver.current_url}")
-            screenshot_path = f"debug_{label}.png"
-            driver.save_screenshot(screenshot_path)
-            print(f"  🔎 [DEBUG:{label}] 스크린샷 저장: {os.path.abspath(screenshot_path)}")
-
-            source = driver.page_source
-            # 크롬 net::ERR_* 네트워크 에러 코드 탐지 (연결 실패 페이지인지 확인)
-            err_match = re.search(r'ERR_[A-Z_]+', source)
-            if err_match:
-                print(f"  🔎 [DEBUG:{label}] ⚠️ 크롬 네트워크 에러 감지: {err_match.group()}")
-
-            page_snippet = source[:1500].replace("\n", " ")
-            print(f"  🔎 [DEBUG:{label}] page_source 앞부분: {page_snippet}")
-        except Exception as e:
-            print(f"  🔎 [DEBUG:{label}] 디버그 정보 수집 실패: {e}")
-
     def upload_to_art_page(self, csv_file_path):
-        """fbcweb.aceproject.co.kr/stats/ 에 CSV 파일 업로드"""
-        art_email = os.getenv("TU_ART_ID")
-        art_password = os.getenv("TU_ART_PASSWORD")
+        """fbcweb.aceproject.co.kr/stats/upload 에 CSV 파일 직접 HTTP POST 업로드
+        (Selenium 미사용 — 브라우저 자동화가 서버/보안 소프트웨어에 차단되는 문제를 회피)
+        """
+        upload_url = "https://fbcweb.aceproject.co.kr/stats/upload"
+        period = os.path.splitext(os.path.basename(csv_file_path))[0]  # 예: "26_7.csv" -> "26_7"
 
-        if not art_email or not art_password:
-            print("⚠️ TU_ART_ID / TU_ART_PASSWORD 환경변수 없음, art 업로드 건너뜀")
-            return False
-
-        art_driver = None
         try:
-            print("🌐 art 페이지 업로드 시작...")
+            print("🌐 통계 업로드 시작 (HTTP 직접 요청)...")
+            with open(csv_file_path, 'rb') as f:
+                files = {
+                    'csv_file': (os.path.basename(csv_file_path), f, 'text/csv'),
+                }
+                data = {
+                    'period': period,
+                }
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+                    'Origin': 'https://fbcweb.aceproject.co.kr',
+                    'Referer': 'https://fbcweb.aceproject.co.kr/stats/upload',
+                }
+                response = requests.post(upload_url, files=files, data=data, headers=headers, timeout=30)
 
-            # 별도 브라우저 인스턴스 (메인과 동일한 headless 설정)
-            from selenium.webdriver.chrome.options import Options as ChromeOptions
-            art_options = ChromeOptions()
-            if self.headless:
-                art_options.add_argument("--headless")
-            art_options.add_argument("--no-sandbox")
-            art_options.add_argument("--disable-dev-shm-usage")
-            art_options.add_argument("--disable-gpu")
-            art_options.add_argument("--window-size=1920,1080")
-            art_driver = webdriver.Chrome(options=art_options)
-            art_wait = WebDriverWait(art_driver, 30)
+            print(f"  📡 응답 코드: {response.status_code}")
 
-            # 1단계: /stats/ 페이지 이동 (Basic Auth 해제됨, 인증 정보 불필요)
-            art_url = "https://fbcweb.aceproject.co.kr/stats/"
-            art_driver.get(art_url)
-            time.sleep(3)
-            print(f"  ✅ art 페이지 이동 완료 (현재 URL: {art_driver.current_url})")
-
-            # 3단계: 'CSV 업로드' 버튼 클릭 (a[href='upload'])
-            csv_upload_selectors = [
-                "//a[@href='upload']",
-                "//a[contains(@href, 'upload')]",
-                "//*[contains(text(), 'CSV 업로드')]",
-                "//button[contains(text(), 'CSV')]",
-            ]
-            csv_btn = None
-            for selector in csv_upload_selectors:
-                try:
-                    csv_btn = WebDriverWait(art_driver, 8).until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    print(f"  ✅ CSV 업로드 버튼 발견")
-                    break
-                except:
-                    continue
-
-            if not csv_btn:
-                print("  ❌ CSV 업로드 버튼을 찾지 못함")
-                self._dump_debug_info(art_driver, "csv_btn_not_found")
+            if response.status_code == 200:
+                print("✅ 통계 업로드 완료!")
+                return True
+            else:
+                print(f"❌ 통계 업로드 실패 (상태 코드: {response.status_code})")
+                print(f"[응답 본문 일부]\n{response.text[:1000]}")
                 return False
-
-            try:
-                csv_btn.click()
-            except:
-                art_driver.execute_script("arguments[0].click();", csv_btn)
-            time.sleep(2)
-            print("  ✅ CSV 업로드 버튼 클릭")
-
-            # 4단계: 파일 input에 파일 경로 전달 (드래그앤드롭 영역)
-            abs_path = os.path.abspath(csv_file_path)
-            file_input_selectors = [
-                "//input[@id='fileInput']",
-                "//input[@type='file']",
-                "//input[contains(@accept, 'csv') or contains(@accept, '.csv')]",
-            ]
-            file_input = None
-            for selector in file_input_selectors:
-                try:
-                    file_input = WebDriverWait(art_driver, 8).until(
-                        EC.presence_of_element_located((By.XPATH, selector))
-                    )
-                    break
-                except:
-                    continue
-
-            if not file_input:
-                print("  ❌ 파일 input 요소를 찾지 못함")
-                self._dump_debug_info(art_driver, "file_input_not_found")
-                return False
-
-            # hidden input도 send_keys 가능하게 처리
-            art_driver.execute_script("arguments[0].style.display = 'block';", file_input)
-            file_input.send_keys(abs_path)
-            time.sleep(2)
-            print(f"  ✅ 파일 선택 완료: {os.path.basename(abs_path)}")
-
-            # 5단계: 업로드 버튼 클릭 (파일 선택 후 JS가 주기를 자동 감지해야 disabled가 풀림)
-            upload_btn_selectors = [
-                "//button[@id='submitBtn']",
-                "//button[text()='업로드']",
-                "//button[contains(text(), '업로드')]",
-                "//*[text()='업로드']",
-            ]
-            upload_btn = None
-            for selector in upload_btn_selectors:
-                try:
-                    upload_btn = WebDriverWait(art_driver, 10).until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    break
-                except:
-                    continue
-
-            if not upload_btn:
-                # 버튼은 존재하지만 여전히 disabled인 경우(주기 자동 감지 실패)를 구분해서 로그
-                try:
-                    disabled_btn = art_driver.find_element(By.XPATH, "//button[@id='submitBtn']")
-                    print(f"  ❌ 업로드 버튼이 비활성화 상태로 남아있음 (주기 자동 감지 실패 추정), disabled={disabled_btn.get_attribute('disabled')}")
-                except:
-                    print("  ❌ 업로드 버튼을 찾지 못함")
-                self._dump_debug_info(art_driver, "upload_btn_not_found")
-                return False
-
-            try:
-                upload_btn.click()
-            except:
-                art_driver.execute_script("arguments[0].click();", upload_btn)
-            time.sleep(3)
-            print("  ✅ 업로드 버튼 클릭 완료")
-
-            print("✅ art 페이지 CSV 업로드 완료!")
-            return True
 
         except Exception as e:
-            import traceback
             import traceback
             print(f"❌ 통계 업로드 실패: {e}")
-            print(f"[상세 오류]\n{traceback.format_exc()}")
             print(traceback.format_exc())
             return False
 
-        finally:
-            if art_driver:
-                art_driver.quit()
-
     def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None):
         """슬랙에 리포트 전송 (파일 업로드 + 메시지)"""
+        if DISABLE_SLACK_NOTIFICATIONS:
+            print("⏸️ 슬랙 노티 임시 비활성화 (테스트 중)")
+            return True
+
         if not self.slack_client:
             return False
         
@@ -1518,20 +1411,18 @@ class TaskworldSeleniumDownloader:
 
                 print(notify_msg)
 
-                # TODO: art 페이지 업로드 네트워크 이슈 완전히 수정되기 전까지 슬랙 노티 임시 중단
-                # if self.slack_client:
-                #     success = self.send_to_slack(
-                #         None, None,
-                #         None if art_skipped else "통계 업로드 실패",
-                #         validation_issues if art_skipped else None
-                #     )
-                #     if success:
-                #         print("✅ 슬랙 노티 전송 완료!")
-                #     else:
-                #         print("❌ 슬랙 전송 실패")
-                # else:
-                #     print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
-                print("⏸️ 슬랙 노티 임시 비활성화 (art 업로드 수정 중)")
+                if self.slack_client:
+                    success = self.send_to_slack(
+                        None, None,
+                        None if art_skipped else "통계 업로드 실패",
+                        validation_issues if art_skipped else None
+                    )
+                    if success:
+                        print("✅ 슬랙 노티 전송 완료!")
+                    else:
+                        print("❌ 슬랙 전송 실패")
+                else:
+                    print("⚠️ 슬랙 토큰이 없어 전송을 건너뜁니다.")
             
             # 8. 파일 정리
             print("\n8️⃣ 파일 정리...")
