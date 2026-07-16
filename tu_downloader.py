@@ -1100,6 +1100,17 @@ class TaskworldSeleniumDownloader:
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
                     'Origin': 'https://fbcweb.aceproject.co.kr',
                     'Referer': 'https://fbcweb.aceproject.co.kr/stats/upload',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Cache-Control': 'max-age=0',
+                    'Sec-CH-UA': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+                    'Sec-CH-UA-Mobile': '?0',
+                    'Sec-CH-UA-Platform': '"macOS"',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'Sec-Fetch-User': '?1',
+                    'Upgrade-Insecure-Requests': '1',
                 }
                 response = requests.post(upload_url, files=files, data=data, headers=headers, timeout=30)
 
@@ -1110,7 +1121,8 @@ class TaskworldSeleniumDownloader:
                 return True
             else:
                 print(f"❌ 통계 업로드 실패 (상태 코드: {response.status_code})")
-                print(f"[응답 본문 일부]\n{response.text[:1000]}")
+                print(f"[응답 헤더]\n{dict(response.headers)}")
+                print(f"[응답 본문 일부]\n{response.text[:1000] if response.text else '(빈 응답)'}")
                 return False
 
         except Exception as e:
