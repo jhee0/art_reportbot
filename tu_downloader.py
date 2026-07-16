@@ -51,10 +51,9 @@ LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = False
+DEFAULT_HEADLESS = True
 
-# TODO: 통계 업로드(requests 전환) 테스트 중 — 확실하게 고쳐지기 전까지 슬랙 오류 노티 전체 중단
-DISABLE_SLACK_NOTIFICATIONS = True
+DISABLE_SLACK_NOTIFICATIONS = False
 
 logger = logging.getLogger(__name__)
 
@@ -1205,9 +1204,6 @@ class TaskworldSeleniumDownloader:
                 art_driver.execute_script("arguments[0].click();", upload_btn)
             time.sleep(3)
             print(f"  ✅ 업로드 버튼 클릭 완료 (현재 URL: {art_driver.current_url})")
-
-            # 5단계: 클릭 후 결과 페이지 확인 (에러 페이지로 튕겼는지 확인)
-            self._dump_debug_info(art_driver, "after_upload_click")
 
             print("✅ 통계 업로드 완료!")
             return True
