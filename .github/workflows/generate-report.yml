@@ -23,7 +23,7 @@ jobs:
         
     - name: Install dependencies
       run: |
-        pip install selenium pandas python-dotenv slack-sdk requests
+        pip install selenium pandas python-dotenv slack-sdk
         
     - name: Setup Chrome
       uses: browser-actions/setup-chrome@v1

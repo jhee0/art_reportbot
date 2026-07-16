@@ -2,7 +2,6 @@
 import os
 import time
 import glob
-import requests
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -52,7 +51,7 @@ LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True
+DEFAULT_HEADLESS = False
 
 # TODO: 통계 업로드(requests 전환) 테스트 중 — 확실하게 고쳐지기 전까지 슬랙 오류 노티 전체 중단
 DISABLE_SLACK_NOTIFICATIONS = True
@@ -1080,56 +1079,148 @@ class TaskworldSeleniumDownloader:
             if self.driver:
                 self.driver.quit()
 
-    def upload_to_art_page(self, csv_file_path):
-        """fbcweb.aceproject.co.kr/stats/upload 에 CSV 파일 직접 HTTP POST 업로드
-        (Selenium 미사용 — 브라우저 자동화가 서버/보안 소프트웨어에 차단되는 문제를 회피)
-        """
-        upload_url = "https://fbcweb.aceproject.co.kr/stats/upload"
-        period = os.path.splitext(os.path.basename(csv_file_path))[0]  # 예: "26_7.csv" -> "26_7"
-
+    def _dump_debug_info(self, driver, label):
+        """실패 시 현재 URL/스크린샷/페이지 소스 일부를 남겨 원인 구분"""
+        import re
         try:
-            print("🌐 통계 업로드 시작 (HTTP 직접 요청)...")
-            with open(csv_file_path, 'rb') as f:
-                files = {
-                    'csv_file': (os.path.basename(csv_file_path), f, 'text/csv'),
-                }
-                data = {
-                    'period': period,
-                }
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
-                    'Origin': 'https://fbcweb.aceproject.co.kr',
-                    'Referer': 'https://fbcweb.aceproject.co.kr/stats/upload',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Cache-Control': 'max-age=0',
-                    'Sec-CH-UA': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
-                    'Sec-CH-UA-Mobile': '?0',
-                    'Sec-CH-UA-Platform': '"macOS"',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'same-origin',
-                    'Sec-Fetch-User': '?1',
-                    'Upgrade-Insecure-Requests': '1',
-                }
-                response = requests.post(upload_url, files=files, data=data, headers=headers, timeout=30)
+            print(f"  🔎 [DEBUG:{label}] 현재 URL: {driver.current_url}")
+            screenshot_path = f"debug_{label}.png"
+            driver.save_screenshot(screenshot_path)
+            print(f"  🔎 [DEBUG:{label}] 스크린샷 저장: {os.path.abspath(screenshot_path)}")
 
-            print(f"  📡 응답 코드: {response.status_code}")
+            source = driver.page_source
+            err_match = re.search(r'ERR_[A-Z_]+', source)
+            if err_match:
+                print(f"  🔎 [DEBUG:{label}] ⚠️ 크롬 네트워크 에러 감지: {err_match.group()}")
 
-            if response.status_code == 200:
-                print("✅ 통계 업로드 완료!")
-                return True
-            else:
-                print(f"❌ 통계 업로드 실패 (상태 코드: {response.status_code})")
-                print(f"[응답 헤더]\n{dict(response.headers)}")
-                print(f"[응답 본문 일부]\n{response.text[:1000] if response.text else '(빈 응답)'}")
+            page_snippet = source[:4000].replace("\n", " ")
+            print(f"  🔎 [DEBUG:{label}] page_source (최대 4000자): {page_snippet}")
+            print(f"  🔎 [DEBUG:{label}] page_source 총 길이: {len(source)}자")
+        except Exception as e:
+            print(f"  🔎 [DEBUG:{label}] 디버그 정보 수집 실패: {e}")
+
+    def upload_to_art_page(self, csv_file_path):
+        """fbcweb.aceproject.co.kr/stats/ 에 CSV 파일 업로드 (Selenium, Basic Auth 불필요)"""
+        art_driver = None
+        try:
+            print("🌐 통계 업로드 시작 (Selenium)...")
+
+            from selenium.webdriver.chrome.options import Options as ChromeOptions
+            art_options = ChromeOptions()
+            if self.headless:
+                art_options.add_argument("--headless")
+            art_options.add_argument("--no-sandbox")
+            art_options.add_argument("--disable-dev-shm-usage")
+            art_options.add_argument("--disable-gpu")
+            art_options.add_argument("--window-size=1920,1080")
+            art_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            art_driver = webdriver.Chrome(options=art_options)
+
+            # 1단계: /stats/ 페이지 이동 (Basic Auth 해제됨, 인증 정보 불필요)
+            art_driver.get("https://fbcweb.aceproject.co.kr/stats/")
+            time.sleep(3)
+            print(f"  ✅ 페이지 이동 완료 (현재 URL: {art_driver.current_url})")
+
+            # 2단계: 'CSV 업로드' 링크 클릭
+            csv_upload_selectors = [
+                "//a[@href='upload']",
+                "//a[contains(@href, 'upload')]",
+                "//*[contains(text(), 'CSV 업로드')]",
+            ]
+            csv_btn = None
+            for selector in csv_upload_selectors:
+                try:
+                    csv_btn = WebDriverWait(art_driver, 8).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    break
+                except:
+                    continue
+
+            if not csv_btn:
+                print("  ❌ CSV 업로드 링크를 찾지 못함")
+                self._dump_debug_info(art_driver, "csv_btn_not_found")
                 return False
+
+            try:
+                csv_btn.click()
+            except:
+                art_driver.execute_script("arguments[0].click();", csv_btn)
+            time.sleep(2)
+            print(f"  ✅ CSV 업로드 링크 클릭 (현재 URL: {art_driver.current_url})")
+
+            # 3단계: 파일 input에 파일 경로 전달
+            abs_path = os.path.abspath(csv_file_path)
+            file_input_selectors = [
+                "//input[@id='fileInput']",
+                "//input[@type='file']",
+            ]
+            file_input = None
+            for selector in file_input_selectors:
+                try:
+                    file_input = WebDriverWait(art_driver, 8).until(
+                        EC.presence_of_element_located((By.XPATH, selector))
+                    )
+                    break
+                except:
+                    continue
+
+            if not file_input:
+                print("  ❌ 파일 input 요소를 찾지 못함")
+                self._dump_debug_info(art_driver, "file_input_not_found")
+                return False
+
+            art_driver.execute_script("arguments[0].style.display = 'block';", file_input)
+            file_input.send_keys(abs_path)
+            time.sleep(2)
+            print(f"  ✅ 파일 선택 완료: {os.path.basename(abs_path)}")
+
+            # 4단계: 업로드 버튼 클릭 (파일 선택 후 JS가 주기를 자동 감지해야 disabled가 풀림)
+            upload_btn_selectors = [
+                "//button[@id='submitBtn']",
+                "//button[contains(text(), '업로드')]",
+            ]
+            upload_btn = None
+            for selector in upload_btn_selectors:
+                try:
+                    upload_btn = WebDriverWait(art_driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    break
+                except:
+                    continue
+
+            if not upload_btn:
+                try:
+                    disabled_btn = art_driver.find_element(By.XPATH, "//button[@id='submitBtn']")
+                    print(f"  ❌ 업로드 버튼이 비활성화 상태로 남아있음, disabled={disabled_btn.get_attribute('disabled')}")
+                except:
+                    print("  ❌ 업로드 버튼을 찾지 못함")
+                self._dump_debug_info(art_driver, "upload_btn_not_found")
+                return False
+
+            try:
+                upload_btn.click()
+            except:
+                art_driver.execute_script("arguments[0].click();", upload_btn)
+            time.sleep(3)
+            print(f"  ✅ 업로드 버튼 클릭 완료 (현재 URL: {art_driver.current_url})")
+
+            # 5단계: 클릭 후 결과 페이지 확인 (에러 페이지로 튕겼는지 확인)
+            self._dump_debug_info(art_driver, "after_upload_click")
+
+            print("✅ 통계 업로드 완료!")
+            return True
 
         except Exception as e:
             import traceback
             print(f"❌ 통계 업로드 실패: {e}")
             print(traceback.format_exc())
             return False
+
+        finally:
+            if art_driver:
+                art_driver.quit()
 
     def send_to_slack(self, csv_file_path, stats=None, error_message=None, validation_issues=None):
         """슬랙에 리포트 전송 (파일 업로드 + 메시지)"""
