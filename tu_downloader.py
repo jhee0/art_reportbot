@@ -36,6 +36,12 @@ MONTHLY_HOURS = {
 }
 MIN_REQUIRED_HOURS = MONTHLY_HOURS[(_now.year, _now.month)]
 
+# 특정 인원만 특정 월에 다른 기준 시간 적용 (예: 중도 합류자 일할 계산)
+# 형식: (연도, 월, "이름"): 시간   -> 해당 연/월에만 적용, 다음 달부터는 자동으로 MONTHLY_HOURS 기준으로 복귀
+PERSON_HOURS_OVERRIDE = {
+    (2026, 7, "유연수"): 64,
+}
+
 # ==========================================
 # 파일 경로 설정
 # ==========================================
@@ -51,9 +57,9 @@ LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True
+DEFAULT_HEADLESS = True #True:윈도우X / False:윈도우O
 
-DISABLE_SLACK_NOTIFICATIONS = False
+DISABLE_SLACK_NOTIFICATIONS = False #True:노티X / False:노티O
 
 logger = logging.getLogger(__name__)
 
@@ -822,8 +828,10 @@ class TaskworldSeleniumDownloader:
             if exclude_names and name_group in exclude_names:
                 print(f"  ⏭️ 합산 검증 제외: {name_group}")
                 continue
-            if total_hours != min_hours:
-                issue_msg = f"{name_group}님 합산 오류 (현재: {total_hours}시간, 기준: {min_hours}시간)"
+                
+            required_hours = PERSON_HOURS_OVERRIDE.get((_now.year, _now.month, name_group), min_hours)
+            if total_hours != required_hours:
+                issue_msg = f"{name_group}님 합산 오류 (현재: {total_hours}시간, 기준: {required_hours}시간)"
                 validation_issues.append(issue_msg)
         
         return validation_issues
