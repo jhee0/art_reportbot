@@ -9,7 +9,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.edge.options import Options
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import logging
@@ -61,9 +61,9 @@ LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True #True:윈도우X / False:윈도우O
+DEFAULT_HEADLESS = True
 
-DISABLE_SLACK_NOTIFICATIONS = False #True:노티X / False:노티O
+DISABLE_SLACK_NOTIFICATIONS = True #True:노티X / False:노티O
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +107,9 @@ class TaskworldSeleniumDownloader:
             print("⚠️ 슬랙 토큰이 없어 슬랙 전송 기능 비활성화")
         
     def setup_driver(self):
-        """Chrome 드라이버 설정 (GitHub Actions용 최적화)"""
+        """Edge 드라이버 설정 (GitHub Actions용 최적화)"""
         try:
-            print("🔧 Chrome 드라이버 설정 시작...")
+            print("🔧 Edge 드라이버 설정 시작...")
             chrome_options = Options()
             
             if self.headless:
@@ -133,10 +133,10 @@ class TaskworldSeleniumDownloader:
             chrome_options.add_experimental_option("prefs", prefs)
             chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             
-            self.driver = webdriver.Chrome(options=chrome_options)
+            self.driver = webdriver.Edge(options=chrome_options)
             self.wait = WebDriverWait(self.driver, 30)
-            
-            print("✅ Chrome 드라이버 설정 완료")
+
+            print("✅ Edge 드라이버 설정 완료")
             
             if not self.headless:
                 time.sleep(3)
@@ -836,6 +836,7 @@ class TaskworldSeleniumDownloader:
             required_hours = PERSON_HOURS_OVERRIDE.get((_now.year, _now.month, name_group), min_hours)
             if total_hours != required_hours:
                 issue_msg = f"{name_group}님 합산 오류 (현재: {total_hours}시간, 기준: {required_hours}시간)"
+                
                 validation_issues.append(issue_msg)
         
         return validation_issues
@@ -1118,8 +1119,8 @@ class TaskworldSeleniumDownloader:
         try:
             print("🌐 통계 업로드 시작 (Selenium)...")
 
-            from selenium.webdriver.chrome.options import Options as ChromeOptions
-            art_options = ChromeOptions()
+            from selenium.webdriver.edge.options import Options as EdgeOptions
+            art_options = EdgeOptions()
             if self.headless:
                 art_options.add_argument("--headless")
             art_options.add_argument("--no-sandbox")
@@ -1127,7 +1128,7 @@ class TaskworldSeleniumDownloader:
             art_options.add_argument("--disable-gpu")
             art_options.add_argument("--window-size=1920,1080")
             art_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            art_driver = webdriver.Chrome(options=art_options)
+            art_driver = webdriver.Edge(options=art_options)
 
             # 1단계: /stats/ 페이지 이동 (Basic Auth 해제됨, 인증 정보 불필요)
             art_driver.get("https://fbcweb.aceproject.co.kr/stats/")
