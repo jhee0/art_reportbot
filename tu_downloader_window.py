@@ -61,9 +61,9 @@ LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 # ==========================================
 # 기타 설정
 # ==========================================
-DEFAULT_HEADLESS = True
+DEFAULT_HEADLESS = True #True:윈도우X / False:윈도우O
 
-DISABLE_SLACK_NOTIFICATIONS = True #True:노티X / False:노티O
+DISABLE_SLACK_NOTIFICATIONS = False #True:노티X / False:노티O
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,10 @@ class TaskworldSeleniumDownloader:
                 "download.prompt_for_download": False,
                 "download.directory_upgrade": True,
                 "safebrowsing.enabled": True,
-                "profile.default_content_settings.popups": 0
+                "profile.default_content_settings.popups": 0,
+                # 사이트가 여러 파일 다운로드를 시도할 때 권한 팝업을 띄우지 않고 자동 허용
+                # (팝업이 뜨면 자동화가 클릭할 수 없어 이후 진행이 멈춤)
+                "profile.default_content_setting_values.automatic_downloads": 1
             }
             chrome_options.add_experimental_option("prefs", prefs)
             chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -266,6 +269,7 @@ class TaskworldSeleniumDownloader:
                     
         except Exception as e:
             print(f"❌ 로그인 전체 프로세스 실패: {e}")
+            self._dump_debug_info(self.driver, "login_process_failed")
             return False
     
     def _handle_email_login(self, email, password):
@@ -310,6 +314,7 @@ class TaskworldSeleniumDownloader:
 
             if not login_btn:
                 print("❌ 로그인 버튼을 찾지 못함")
+                self._dump_debug_info(self.driver, "login_btn_not_found")
                 return False
 
             login_btn.click()
@@ -337,6 +342,7 @@ class TaskworldSeleniumDownloader:
             
         except Exception as e:
             print(f"❌ 이메일 로그인 실패: {e}")
+            self._dump_debug_info(self.driver, "email_login_failed")
             return False
     
     def _add_artroom_team(self):
@@ -542,10 +548,12 @@ class TaskworldSeleniumDownloader:
                     time.sleep(3)
             
             print("❌ 모든 시도 실패")
+            self._dump_debug_info(self.driver, "workspace_nav_failed")
             return False
-            
+
         except Exception as e:
             print(f"❌ 워크스페이스 접속 중 오류: {e}")
+            self._dump_debug_info(self.driver, "workspace_nav_error")
             return False
 
 
@@ -1094,11 +1102,14 @@ class TaskworldSeleniumDownloader:
                 self.driver.quit()
 
     def _dump_debug_info(self, driver, label):
-        """실패 시 현재 URL/스크린샷/페이지 소스 일부를 남겨 원인 구분"""
+        """실패 시 현재 URL/스크린샷/페이지 소스 일부를 남겨 원인 구분 (debug 폴더에 날짜_라벨.png로 저장)"""
         import re
         try:
             print(f"  🔎 [DEBUG:{label}] 현재 URL: {driver.current_url}")
-            screenshot_path = f"debug_{label}.png"
+            debug_dir = os.path.join(self.download_dir, "debug")
+            os.makedirs(debug_dir, exist_ok=True)
+            date_str = datetime.now(self.korea_tz).strftime("%Y%m%d_%H%M%S")
+            screenshot_path = os.path.join(debug_dir, f"{date_str}_{label}.png")
             driver.save_screenshot(screenshot_path)
             print(f"  🔎 [DEBUG:{label}] 스크린샷 저장: {os.path.abspath(screenshot_path)}")
 
@@ -1128,6 +1139,12 @@ class TaskworldSeleniumDownloader:
             art_options.add_argument("--disable-gpu")
             art_options.add_argument("--window-size=1920,1080")
             art_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            art_options.add_experimental_option("prefs", {
+                "download.default_directory": self.download_dir,
+                "download.prompt_for_download": False,
+                "download.directory_upgrade": True,
+                "profile.default_content_setting_values.automatic_downloads": 1
+            })
             art_driver = webdriver.Edge(options=art_options)
 
             # 1단계: /stats/ 페이지 이동 (Basic Auth 해제됨, 인증 정보 불필요)
@@ -1235,6 +1252,8 @@ class TaskworldSeleniumDownloader:
             import traceback
             print(f"❌ 통계 업로드 실패: {e}")
             print(traceback.format_exc())
+            if art_driver:
+                self._dump_debug_info(art_driver, "upload_unexpected_error")
             return False
 
         finally:
@@ -1370,6 +1389,7 @@ class TaskworldSeleniumDownloader:
             
             if not export_btn:
                 print("❌ 'Taskworld 내보내기' 버튼을 찾지 못함")
+                self._dump_debug_info(self.driver, "export_btn_not_found")
                 return None
             
             # 1차: 일반 클릭
@@ -1431,10 +1451,12 @@ class TaskworldSeleniumDownloader:
                 time.sleep(check_interval)
             
             print("❌ CSV 다운로드 타임아웃 (120초 초과)")
+            self._dump_debug_info(self.driver, "csv_download_timeout")
             return None
-            
+
         except Exception as e:
             print(f"❌ CSV 내보내기 실패: {e}")
+            self._dump_debug_info(self.driver, "csv_export_failed")
             return None
 
     def run_complete_automation(self, email, password):

@@ -128,7 +128,11 @@ class TaskworldSeleniumDownloader:
                 "download.prompt_for_download": False,
                 "download.directory_upgrade": True,
                 "safebrowsing.enabled": True,
-                "profile.default_content_settings.popups": 0
+                "profile.default_content_settings.popups": 0,
+                # Chrome이 "여러 파일 다운로드" 권한을 물어보지 않고 자동 허용하도록 설정
+                # (미설정 시 사이트가 짧은 시간 내 여러 파일을 다운로드하려 하면
+                #  네이티브 권한 팝업이 뜨는데, Selenium은 이 팝업을 클릭할 수 없어 진행이 멈춤)
+                "profile.default_content_setting_values.automatic_downloads": 1
             }
             chrome_options.add_experimental_option("prefs", prefs)
             chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -1127,6 +1131,14 @@ class TaskworldSeleniumDownloader:
             art_options.add_argument("--disable-gpu")
             art_options.add_argument("--window-size=1920,1080")
             art_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            # 사이트가 여러 파일 다운로드를 시도할 때 Chrome이 권한 팝업을 띄우지 않도록 자동 허용
+            # (헤드리스에서 이 팝업이 뜨면 클릭할 수 없어 이후 진행이 멈춤)
+            art_options.add_experimental_option("prefs", {
+                "download.default_directory": self.download_dir,
+                "download.prompt_for_download": False,
+                "download.directory_upgrade": True,
+                "profile.default_content_setting_values.automatic_downloads": 1
+            })
             art_driver = webdriver.Chrome(options=art_options)
 
             # 1단계: /stats/ 페이지 이동 (Basic Auth 해제됨, 인증 정보 불필요)
