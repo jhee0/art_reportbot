@@ -54,9 +54,7 @@ FIRST_TAGS_OPTIONAL_SECOND_FILE = "first_tags_optional_second.txt"
 SECOND_TAGS_ART_FILE = "second_tags_art.txt"
 SECOND_TAGS_PROJECT_FILE = "second_tags_project.txt"
 EXCLUDE_VALUES_FILE = "exclude_values.txt"
-EMAIL_MAP_FILE = "email_map.txt"
 EXCLUDE_NAMES_FILE = "exclude_names.txt"
-LEAVE_KEYWORDS_FILE = "leave_keywords.txt"
 
 # ==========================================
 # 기타 설정
@@ -176,62 +174,6 @@ class TaskworldSeleniumDownloader:
             print(f"❌ 제외 값 로드 실패: {e}")
             return ["주요일정", "아트실", "UI팀", "리소스팀", "디자인팀", "TA팀"]
     
-    def load_email_map(self):
-        """이메일 → 이름 매핑 파일 로드 (email_map.txt)
-        형식: jhee@aceproject.co.kr : 배진희
-        """
-        try:
-            if os.path.exists(EMAIL_MAP_FILE):
-                email_map = {}
-                with open(EMAIL_MAP_FILE, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith('#'):
-                            continue
-                        parts = [p.strip() for p in line.split(':')]
-                        if len(parts) >= 2:
-                            email_map[parts[0]] = parts[1]
-                print(f"✅ 이메일 매핑 로드 완료: {len(email_map)}명")
-                return email_map
-            else:
-                print(f"⚠️ {EMAIL_MAP_FILE} 파일이 없습니다! 기본 파일을 생성합니다.")
-                with open(EMAIL_MAP_FILE, 'w', encoding='utf-8') as f:
-                    f.write("# 이메일 → 이름 매핑\n")
-                    f.write("# 형식: 이메일@도메인 : 이름\n\n")
-                    f.write("# jhee@aceproject.co.kr : 배진희\n")
-                return {}
-        except Exception as e:
-            print(f"❌ 이메일 매핑 로드 실패: {e}")
-            return {}
-
-    def load_leave_keywords(self):
-        """연차/반차류 Tasklist 키워드 로드 (leave_keywords.txt)
-        이 키워드에 해당하는 행은 Tags가 자동으로 "연차"로 설정됨
-        """
-        try:
-            if os.path.exists(LEAVE_KEYWORDS_FILE):
-                keywords = set()
-                with open(LEAVE_KEYWORDS_FILE, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        kw = line.strip()
-                        if kw and not kw.startswith('#'):
-                            keywords.add(kw)
-                print(f"✅ 연차 키워드 로드: {len(keywords)}개 → {keywords}")
-                return keywords
-            else:
-                # 기본값으로 파일 생성
-                defaults = ["연차", "반차", "오전반차", "오후반차", "생일", "시간차", "공휴일"]
-                with open(LEAVE_KEYWORDS_FILE, 'w', encoding='utf-8') as f:
-                    f.write("# 연차/반차류 Tasklist 키워드 (한 줄에 하나)\n")
-                    f.write("# 이 키워드에 해당하는 행은 Tags가 자동으로 '연차'로 설정됨\n\n")
-                    for kw in defaults:
-                        f.write(f"{kw}\n")
-                print(f"✅ {LEAVE_KEYWORDS_FILE} 기본 파일 생성 완료")
-                return set(defaults)
-        except Exception as e:
-            print(f"❌ 연차 키워드 로드 실패: {e}")
-            return set(["연차", "반차", "오전반차", "오후반차", "생일", "시간차", "공휴일"])
-
     def load_exclude_names(self):
         """검증에서 제외할 이름 목록 로드 (exclude_names.txt)
         형식: 한 줄에 이름 하나
@@ -346,35 +288,35 @@ class TaskworldSeleniumDownloader:
             return False
     
     def _add_artroom_team(self):
-        """사이드바 팀 섹션에서 + 버튼 클릭 → 아트실 팀 추가"""
+        """사이드바 조직 섹션에서 + 버튼 클릭 → 아트실 조직 추가"""
         try:
-            # 팀 섹션 안에서만 정확히 '아트실' 텍스트 확인
+            # 조직 섹션 안에서만 정확히 '아트실' 텍스트 확인
             # (프로젝트의 '아트실 5월' 등과 혼동 방지)
             try:
-                # '팀' 텍스트 이후에 오는 요소 중 text()가 정확히 '아트실'인 것만
+                # '조직' 텍스트 이후에 오는 요소 중 text()가 정확히 '아트실'인 것만
                 team_artroom = self.driver.find_elements(
                     By.XPATH,
-                    "//*[text()='팀']/following::*[text()='아트실']"
+                    "//*[text()='조직']/following::*[text()='아트실']"
                 )
                 visible = [el for el in team_artroom if el.is_displayed() and el.text.strip() == '아트실']
                 if visible:
-                    print("✅ 아트실 팀이 이미 사이드바 팀 섹션에 존재함, 추가 생략")
+                    print("✅ 아트실이 이미 사이드바 조직 섹션에 존재함, 추가 생략")
                     return True
                 else:
-                    print("ℹ️ 팀 섹션에 아트실 없음, + 버튼으로 추가 시작")
+                    print("ℹ️ 조직 섹션에 아트실 없음, + 버튼으로 추가 시작")
             except Exception as e:
-                print(f"ℹ️ 팀 섹션 확인 중 오류: {e}, + 버튼으로 추가 시작")
+                print(f"ℹ️ 조직 섹션 확인 중 오류: {e}, + 버튼으로 추가 시작")
 
-            print("➕ 팀 섹션 + 버튼 탐색 중...")
+            print("➕ 조직 섹션 + 버튼 탐색 중...")
 
             # + 버튼은 SVG 아이콘 (class="w-3.5 h-3.5")을 포함한 버튼
             plus_selectors = [
                 # SVG 클래스로 직접 찾고 부모 버튼 클릭
-                "//*[text()='팀']/following::*[.//*[contains(@class,'w-3.5')]][1]",
-                "//*[text()='팀']/following::button[.//*[contains(@class,'w-3.5')]][1]",
-                "//*[text()='팀']/following::button[1]",
-                "//*[text()='팀']/parent::*//button",
-                "//*[text()='팀']/parent::*/button",
+                "//*[text()='조직']/following::*[.//*[contains(@class,'w-3.5')]][1]",
+                "//*[text()='조직']/following::button[.//*[contains(@class,'w-3.5')]][1]",
+                "//*[text()='조직']/following::button[1]",
+                "//*[text()='조직']/parent::*//button",
+                "//*[text()='조직']/parent::*/button",
                 # SVG 부모 요소 직접
                 "//svg[contains(@class,'w-3.5')]/parent::button",
                 "//svg[contains(@class,'w-3.5')]/parent::*[@role='button']",
@@ -387,7 +329,7 @@ class TaskworldSeleniumDownloader:
                     els = self.driver.find_elements(By.XPATH, selector)
                     for el in els:
                         if el.is_displayed():
-                            print(f"✅ 팀 + 버튼 발견: tag={el.tag_name} class='{el.get_attribute('class')}'")
+                            print(f"✅ 조직 + 버튼 발견: tag={el.tag_name} class='{el.get_attribute('class')}'")
                             plus_btn = el
                             break
                     if plus_btn:
@@ -396,7 +338,7 @@ class TaskworldSeleniumDownloader:
                     continue
 
             if not plus_btn:
-                print("❌ 팀 + 버튼을 찾지 못함")
+                print("❌ 조직 + 버튼을 찾지 못함")
                 return False
 
             try:
@@ -405,9 +347,9 @@ class TaskworldSeleniumDownloader:
                 self.driver.execute_script("arguments[0].click();", plus_btn)
 
             time.sleep(2)
-            print("✅ 팀 + 버튼 클릭 완료, 팀 검색창 대기...")
+            print("✅ 조직 + 버튼 클릭 완료, 검색창 대기...")
 
-            # 팀 검색 입력창 대기 후 '아트실' 입력
+            # 검색 입력창 대기 후 '아트실' 입력
             search_input = None
             search_selectors = [
                 "//input[@placeholder]",
@@ -636,7 +578,7 @@ class TaskworldSeleniumDownloader:
                 tag_validation_issues.append("Tags 열이 존재하지 않습니다.")
                 return tag_validation_issues
             if 'Name' not in df.columns:
-                tag_validation_issues.append("Name 열이 존재하지 않습니다. email_map.txt 설정을 확인하세요.")
+                tag_validation_issues.append("Name 열이 존재하지 않습니다.")
                 return tag_validation_issues
             
             # 전체 허용된 첫 번째 태그 목록
@@ -649,7 +591,7 @@ class TaskworldSeleniumDownloader:
                 task_name = row['Task']
                 task_display = str(task_name)[:20] + "..." if len(str(task_name)) > 20 else str(task_name)
 
-                # 이름 설정 (email_map 변환된 이름 전체 사용)
+                # 이름 설정 (다운로드 파일의 Name 값 그대로 사용)
                 if pd.isna(person_name) or str(person_name).strip() == '':
                     person_group = '미분류'
                 else:
@@ -806,7 +748,7 @@ class TaskworldSeleniumDownloader:
                 return 0.0
         
         def get_name_group(name):
-            """이름 전체 반환 (email_map으로 이미 변환된 이름 사용)"""
+            """이름 전체 반환"""
             if pd.isna(name) or str(name).strip() == '':
                 return '미분류'
             return str(name).strip()
@@ -849,111 +791,44 @@ class TaskworldSeleniumDownloader:
         
         return validation_issues
     
-    def process_csv(self, input_file, columns=['Assigned To', 'Task', 'Tags', 'Time Spent']):
-        """CSV 파일 처리 - Assigned To(이메일→이름 변환) 기반 필터링 후 저장"""
+    def process_csv(self, input_file):
+        """다운로드된 CSV(헤더 없음, A~D열 = Name/Task/Tags/Time Spent)를 기존 규칙에 맞는 파일명으로 저장 + 검증"""
         try:
-            # CSV 읽기
-            df = pd.read_csv(input_file)
-            original_count = len(df)
-            print(f"📊 원본 행 수: {original_count}")
+            # CSV 읽기 (헤더 없음 — A~D열을 위치 기준으로 매핑)
+            df = pd.read_csv(input_file, header=None, names=['Name', 'Task', 'Tags', 'Time Spent'], encoding='utf-8-sig')
+            print(f"📊 원본 행 수: {len(df)}")
 
-            # 이메일 → 이름 매핑 로드
-            email_map = self.load_email_map()
-
-            # Assigned To 이메일 → 이름 변환
-            if 'Assigned To' in df.columns:
-                df['Name'] = df['Assigned To'].apply(
-                    lambda x: email_map.get(str(x).strip(), str(x).strip()) if pd.notna(x) else ''
-                )
-                print(f"✅ 이름 변환 완료")
-            else:
-                print("⚠️ 'Assigned To' 열 없음")
-                df['Name'] = ''
-
-            # Assigned To가 비어있는 행 체크 (오류로 수집, 제거하지 않음)
-            empty_assigned = df[df['Assigned To'].isna() | (df['Assigned To'].astype(str).str.strip() == '')]
+            # A열(Name)이 비어있는 행 체크 (담당자 없음, 오류로 수집)
+            empty_name = df[df['Name'].isna() | (df['Name'].astype(str).str.strip() == '')]
             assigned_warnings = []
-            for _, row in empty_assigned.iterrows():
+            for _, row in empty_name.iterrows():
                 task_display = str(row['Task'])[:25] + "..." if len(str(row['Task'])) > 25 else str(row['Task'])
-                assigned_warnings.append(f"담당자 없음 오류 : {task_display} (Assigned To 비어있음)")
+                assigned_warnings.append(f"담당자 없음 오류 : {task_display} (A열 비어있음)")
                 print(f"⚠️ 담당자 없음: {task_display}")
 
-            # email_map에 없는 이메일 경고
-            if email_map:
-                unmapped = df[~df['Assigned To'].isna() &
-                              ~df['Assigned To'].astype(str).str.strip().isin(email_map.keys())]
-                for email_val in unmapped['Assigned To'].dropna().unique():
-                    email_val = str(email_val).strip()
-                    if email_val:
-                        print(f"⚠️ email_map 미등록 이메일: {email_val}")
+            final_df = df.copy()
 
-            # 필터링 없이 전체 행 사용
-            df_filtered = df
+            # exclude_names에 포함된 이름은 CSV에서 제외 (검증 + 업로드 파일 모두)
+            exclude_names = self.load_exclude_names()
             removed_count = 0
-            print(f"📊 전체 행 수: {len(df_filtered)}")
-
-            # Status가 Completed이면서 첫번째 태그가 '공통업무'인 경우 검증 (필터링 전)
-            status_completed_tag_issues = []
-            if 'Status' in df_filtered.columns and 'Tags' in df_filtered.columns:
-                for idx, row in df_filtered.iterrows():
-                    if str(row.get('Status', '')).strip() == 'Completed':
-                        tags = row.get('Tags')
-                        if pd.isna(tags) or str(tags).strip() in ('', 'nan'):
-                            continue
-                        first_tag = str(tags).split(',')[0].strip()
-                        if first_tag.startswith('공통업무'):
-                            name = str(row.get('Name', '')).strip() or '미분류'
-                            task_name = str(row.get('Task', ''))
-                            task_display = task_name[:20] + "..." if len(task_name) > 20 else task_name
-                            issue_msg = f"{name}님 태그 오류 : {task_display} (완료된 업무에 '공통업무' 태그 불가)"
-                            if issue_msg not in status_completed_tag_issues:
-                                status_completed_tag_issues.append(issue_msg)
-
-            # 최종 4열: Name, Task, Tags, Time Spent
-            final_columns = ['Name', 'Task', 'Tags', 'Time Spent']
-            missing_columns = [col for col in final_columns if col not in df_filtered.columns]
-            if missing_columns:
-                return None, None, f"열을 찾을 수 없음: {missing_columns}", []
-
-            final_df = df_filtered[final_columns].copy()
-
-            # exclude_names에 포함된 이름은 CSV에서 제외
-            exclude_names_for_csv = self.load_exclude_names()
-            if exclude_names_for_csv:
+            if exclude_names:
                 before = len(final_df)
-                final_df = final_df[~final_df['Name'].isin(exclude_names_for_csv)]
-                removed = before - len(final_df)
-                if removed > 0:
-                    print(f"✅ 제외 이름 필터링: {removed}행 제거 ({exclude_names_for_csv})")
+                final_df = final_df[~final_df['Name'].isin(exclude_names)]
+                removed_count = before - len(final_df)
+                if removed_count > 0:
+                    print(f"✅ 제외 이름 필터링: {removed_count}행 제거 ({exclude_names})")
 
-            # 연차/반차류 행 자동 태그 처리
-            # Tasklist가 연차 키워드인 행 → Task를 Tasklist 값으로, Tags를 "연차"로 설정
-            leave_keywords = self.load_leave_keywords()
-            leave_count = 0
-            for idx in final_df.index:
-                if idx in df.index and df.loc[idx, 'Tasklist'] in leave_keywords:
-                    tasklist_val = df.loc[idx, 'Tasklist']
-                    final_df.at[idx, 'Task'] = '사내행사' if tasklist_val == '행사공결' else tasklist_val
-                    final_df.at[idx, 'Tags'] = '사내행사' if tasklist_val == '행사공결' else '연차'
-                    leave_count += 1
-            if leave_count > 0:
-                print(f"✅ 연차/반차 자동 태그 처리: {leave_count}행")
-
-            # 검증 (수동 입력 포함된 df로 검증)
+            # 검증
             validation_issues = self.validate_csv_data(final_df.copy(), min_hours=MIN_REQUIRED_HOURS)
-            # 담당자 없음 오류 추가
             if assigned_warnings:
                 validation_issues = assigned_warnings + validation_issues
-            # Status Completed + 공통업무 태그 오류 추가
-            if status_completed_tag_issues:
-                validation_issues = status_completed_tag_issues + validation_issues
 
-            # 파일 저장
+            # 파일명을 기존 규칙(OUTPUT_FILENAME)에 맞게 저장
             output_file = OUTPUT_FILENAME
             if os.path.exists(output_file):
                 os.remove(output_file)
             final_df.to_csv(output_file, index=False, header=False, encoding='utf-8-sig')
-            print(f"✅ 파일 저장 완료: {output_file}")
+            print(f"✅ 파일명 변경 완료: {output_file}")
 
             return final_df, removed_count, output_file, validation_issues
 
@@ -1351,63 +1226,64 @@ class TaskworldSeleniumDownloader:
 
 
     def export_csv(self):
-        """TU 인트라넷 통계 페이지에서 'Taskworld 내보내기' 버튼 클릭 → CSV 다운로드"""
+        """TU 인트라넷 통계 페이지에서 'CSV 내보내기' 버튼 클릭 → CSV 다운로드"""
         try:
             # 다운로드 전 기존 CSV 파일 목록 저장 및 정리
-            export_files = glob.glob(os.path.join(self.download_dir, "export-projects*.csv"))
+            export_files = glob.glob(os.path.join(self.download_dir, "export-*.csv"))
             for file in export_files:
                 try:
                     os.remove(file)
                 except:
                     pass
-            
+
             existing_csvs = set(glob.glob(os.path.join(self.download_dir, "*.csv")))
-            
+
             time.sleep(2)
-            
-            # 'Taskworld 내보내기' 버튼 찾기
-            print("🔍 'Taskworld 내보내기' 버튼 탐색 중...")
+
+            # 'CSV 내보내기' 버튼 찾기
+            print("🔍 'CSV 내보내기' 버튼 탐색 중...")
             tw_export_selectors = [
-                "//button[contains(text(), 'Taskworld 내보내기')]",
-                "//a[contains(text(), 'Taskworld 내보내기')]",
-                "//span[contains(text(), 'Taskworld 내보내기')]",
-                "//*[contains(text(), 'Taskworld 내보내기')]",
-                "//button[contains(text(), 'Taskworld')]",
-                "//*[contains(text(), 'Taskworld') and contains(text(), '내보내기')]",
+                "//button[contains(text(), 'CSV 내보내기')]",
+                "//a[contains(text(), 'CSV 내보내기')]",
+                "//span[contains(text(), 'CSV 내보내기')]",
+                "//*[contains(text(), 'CSV 내보내기')]",
+                "//button[contains(text(), 'CSV')]",
+                "//*[contains(text(), 'CSV') and contains(text(), '내보내기')]",
             ]
-            
+
             export_btn = None
             for selector in tw_export_selectors:
                 try:
                     export_btn = WebDriverWait(self.driver, 8).until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
-                    print(f"✅ 'Taskworld 내보내기' 버튼 발견: {selector}")
+                    print(f"✅ 'CSV 내보내기' 버튼 발견: {selector}")
                     break
                 except:
                     continue
-            
+
             if not export_btn:
-                print("❌ 'Taskworld 내보내기' 버튼을 찾지 못함")
+                print("❌ 'CSV 내보내기' 버튼을 찾지 못함")
                 self._dump_debug_info(self.driver, "export_btn_not_found")
                 return None
-            
-            # 1차: 일반 클릭
+
+            # 1차: 일반 클릭, 실패했을 때만 JavaScript 강제 클릭
+            # (둘 다 무조건 실행하면 버튼이 두 번 눌려 동일한 CSV가 두 개 다운로드됨)
+            clicked = False
             try:
                 export_btn.click()
                 print("✅ 버튼 클릭 (일반)")
+                clicked = True
             except:
                 pass
-            
-            time.sleep(2)
-            
-            # 2차: JavaScript 강제 클릭
-            try:
-                self.driver.execute_script("arguments[0].click();", export_btn)
-                print("✅ 버튼 클릭 (JavaScript)")
-            except:
-                pass
-            
+
+            if not clicked:
+                try:
+                    self.driver.execute_script("arguments[0].click();", export_btn)
+                    print("✅ 버튼 클릭 (JavaScript)")
+                except:
+                    pass
+
             time.sleep(2)
             
             # 다운로드 완료 대기 (최대 120초)
@@ -1427,7 +1303,7 @@ class TaskworldSeleniumDownloader:
                         return latest_file
                 
                 # Downloads 폴더도 확인
-                downloads_pattern = os.path.expanduser("~/Downloads/export-projects*.csv")
+                downloads_pattern = os.path.expanduser("~/Downloads/export-*.csv")
                 downloads_csvs = glob.glob(downloads_pattern)
                 if downloads_csvs:
                     latest_download = max(downloads_csvs, key=os.path.getctime)
@@ -1583,8 +1459,8 @@ class TaskworldSeleniumDownloader:
                     os.remove(csv_file)
                     print(f"🗑️ 원본 파일 삭제: {os.path.basename(csv_file)}")
                 
-                # Downloads 폴더의 export-projects 관련 파일들도 정리
-                downloads_pattern = os.path.expanduser("~/Downloads/export-projects*.csv")
+                # Downloads 폴더의 export 관련 파일들도 정리
+                downloads_pattern = os.path.expanduser("~/Downloads/export-*.csv")
                 downloads_files = glob.glob(downloads_pattern)
                 for file in downloads_files:
                     try:
