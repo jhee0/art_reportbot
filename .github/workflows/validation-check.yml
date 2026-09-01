@@ -2,9 +2,9 @@ name: validation-check
 
 on:
   schedule:
-    - cron: '34 6 * * 1-5'   # 월-금 KST 16:00
-    - cron: '34 8 * * 1-5'  # 월-금 KST 19:00
-    - cron: '34 10 * * 1-5'  # 월-금 KST 22:00
+    - cron: '34 6 * * 1-5'   # 월-금 KST 15:34
+    - cron: '34 8 * * 1-5'  # 월-금 KST 17:34
+    - cron: '34 10 * * 1-5'  # 월-금 KST 19:34
   
   # 수동 실행도 가능하게
   workflow_dispatch:
@@ -16,7 +16,13 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
+    - name: Log actual run time
+      run: |
+        echo "Triggered cron: ${{ github.event.schedule }}"
+        echo "실행된 UTC 시각: $(date -u +'%Y-%m-%d %H:%M:%S')"
+        echo "실행된 KST 시각: $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M:%S')"
+        
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
