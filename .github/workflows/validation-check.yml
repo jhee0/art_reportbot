@@ -2,9 +2,9 @@ name: validation-check
 
 on:
   schedule:
-    - cron: '34 6 * * 1-5'   # 월-금 KST 15:34
-    - cron: '34 8 * * 1-5'  # 월-금 KST 17:34
-    - cron: '34 10 * * 1-5'  # 월-금 KST 19:34
+  - cron: '34 1 * * 1-5'   # 목표 KST 15:34 → 5시간 당겨 예약
+  - cron: '34 3 * * 1-5'   # 목표 KST 17:34 → 5시간 당겨 예약
+  - cron: '34 5 * * 1-5'   # 목표 KST 19:34 → 5시간 당겨 예약
   
   # 수동 실행도 가능하게
   workflow_dispatch:
