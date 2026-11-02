@@ -44,6 +44,7 @@ MIN_REQUIRED_HOURS = MONTHLY_HOURS[(_now.year, _now.month)]
 # 형식: (연도, 월, "이름"): 시간   -> 해당 연/월에만 적용, 다음 달부터는 자동으로 MONTHLY_HOURS 기준으로 복귀
 PERSON_HOURS_OVERRIDE = {
     (2026, 7, "유연수"): 64,
+    (2026, 11, "박지훈"): 80,
 }
 
 # ==========================================
