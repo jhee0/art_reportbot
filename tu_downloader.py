@@ -286,37 +286,41 @@ class TaskworldSeleniumDownloader:
             print(f"❌ 이메일 로그인 실패: {e}")
             return False
     
+    # 새 사이드바(rail UI) 구조:
+    #   <div class="rail-group">조직<span class="rail-actions">
+    #       <button class="rail-action" aria-label="조직 추가">+</button></span></div>
+    #   <div class="rail-row">아트실</div> <div class="rail-row">TA팀</div> ...
+    ORG_ADD_BTN_XPATH = "//button[@aria-label='조직 추가']"
+    ORG_ROWS_XPATH = (
+        "//button[@aria-label='조직 추가']/ancestor::div[contains(@class,'rail-group')][1]"
+        "/following-sibling::div[contains(@class,'rail-row')]"
+    )
+
+    def _find_org_artroom_row(self):
+        """조직 섹션에서 이름이 정확히 '아트실'인 rail-row 반환 (없으면 None)"""
+        for row in self.driver.find_elements(By.XPATH, self.ORG_ROWS_XPATH):
+            try:
+                names = [el.text.strip() for el in row.find_elements(By.XPATH, ".//*")] + [row.text.strip()]
+                if '아트실' in names and row.is_displayed():
+                    return row
+            except Exception:
+                continue
+        return None
+
     def _add_artroom_team(self):
         """사이드바 조직 섹션에서 + 버튼 클릭 → 아트실 조직 추가"""
         try:
-            # 조직 섹션 안에서만 정확히 '아트실' 텍스트 확인
-            # (프로젝트의 '아트실 5월' 등과 혼동 방지)
-            try:
-                # '조직' 텍스트 이후에 오는 요소 중 text()가 정확히 '아트실'인 것만
-                team_artroom = self.driver.find_elements(
-                    By.XPATH,
-                    "//*[text()='조직']/following::*[text()='아트실']"
-                )
-                visible = [el for el in team_artroom if el.is_displayed() and el.text.strip() == '아트실']
-                if visible:
-                    print("✅ 아트실이 이미 사이드바 조직 섹션에 존재함, 추가 생략")
-                    return True
-                else:
-                    print("ℹ️ 조직 섹션에 아트실 없음, + 버튼으로 추가 시작")
-            except Exception as e:
-                print(f"ℹ️ 조직 섹션 확인 중 오류: {e}, + 버튼으로 추가 시작")
+            if self._find_org_artroom_row():
+                print("✅ 아트실이 이미 사이드바 조직 섹션에 존재함, 추가 생략")
+                return True
+            print("ℹ️ 조직 섹션에 아트실 없음, + 버튼으로 추가 시작")
 
             print("➕ 조직 섹션 + 버튼 탐색 중...")
 
-            # + 버튼: <svg class="w-3.5 h-3.5"><path d="M12 4v16m8-8H4"/></svg> 를 포함한 버튼
-            # (× 버튼도 w-3.5 아이콘을 쓰므로 path 모양으로 '+'만 정확히 구분)
             plus_path = "*[local-name()='path' and @d='M12 4v16m8-8H4']"
             plus_selectors = [
-                f"//*[text()='조직']/following::button[.//{plus_path}][1]",
-                f"//*[text()='조직']/following::*[@role='button'][.//{plus_path}][1]",
-                f"//button[.//{plus_path}]",
-                f"//{plus_path}/ancestor::*[self::button or @role='button'][1]",
-                f"//{plus_path}/ancestor::*[local-name()='svg']/parent::*",
+                self.ORG_ADD_BTN_XPATH,
+                f"//*[contains(@class,'rail-group')][contains(normalize-space(.),'조직')]//button[.//{plus_path}]",
             ]
 
             plus_btn = None
@@ -335,6 +339,7 @@ class TaskworldSeleniumDownloader:
 
             if not plus_btn:
                 print("❌ 조직 + 버튼을 찾지 못함")
+                self._dump_debug_info(self.driver, "plus_btn_not_found")
                 return False
 
             try:
@@ -406,6 +411,16 @@ class TaskworldSeleniumDownloader:
         try:
             print(f"📂 '아트실' 사이드바 메뉴 찾기...")
 
+            # SPA라 URL 도착 후에도 사이드바가 늦게 그려질 수 있음 → 사이드바 렌더링 대기
+            try:
+                WebDriverWait(self.driver, 30).until(
+                    EC.presence_of_element_located((By.XPATH, self.ORG_ADD_BTN_XPATH))
+                )
+                print("✅ 사이드바 로딩 확인")
+            except Exception:
+                print("⚠️ 30초 내 사이드바 '조직 추가' 버튼이 보이지 않음")
+                self._dump_debug_info(self.driver, "sidebar_not_found")
+
             # 아트실 팀 추가 (없을 경우 + 버튼으로 추가)
             self._add_artroom_team()
             time.sleep(2)
@@ -414,35 +429,20 @@ class TaskworldSeleniumDownloader:
             for attempt in range(1, max_attempts + 1):
                 print(f"\n🔄 시도 {attempt}/{max_attempts}")
                 
-                # 사이드바에서 '아트실' 클릭 — 정확히 '아트실' 텍스트만 매칭
-                artroom_selectors = [
-                    "//*[text()='아트실']",
-                    "//a[text()='아트실']",
-                    "//span[text()='아트실']",
-                    "//div[text()='아트실']",
-                    "//*[normalize-space(text())='아트실']",
-                ]
-                
+                # 사이드바 조직 섹션의 '아트실' rail-row 클릭
                 clicked = False
-                for selector in artroom_selectors:
+                row = self._find_org_artroom_row()
+                if row:
+                    links = row.find_elements(By.XPATH, ".//a")
+                    target = links[0] if links else row
                     try:
-                        els = self.driver.find_elements(By.XPATH, selector)
-                        for el in els:
-                            # 텍스트가 정확히 '아트실'인지 재확인 (아트실5월 등 제외)
-                            if el.text.strip() == '아트실' and el.is_displayed():
-                                try:
-                                    el.click()
-                                except:
-                                    self.driver.execute_script("arguments[0].click();", el)
-                                print("✅ '아트실' 클릭 성공")
-                                clicked = True
-                                time.sleep(3)
-                                break
-                        if clicked:
-                            break
-                    except:
-                        continue
-                
+                        target.click()
+                    except Exception:
+                        self.driver.execute_script("arguments[0].click();", target)
+                    print("✅ '아트실' 클릭 성공")
+                    clicked = True
+                    time.sleep(3)
+
                 if not clicked:
                     print(f"❌ 시도 {attempt}: '아트실' 메뉴를 찾지 못함")
                     if attempt < max_attempts:
@@ -486,6 +486,7 @@ class TaskworldSeleniumDownloader:
                     time.sleep(3)
             
             print("❌ 모든 시도 실패")
+            self._dump_debug_info(self.driver, "artroom_not_found")
             return False
             
         except Exception as e:

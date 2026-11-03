@@ -53,3 +53,4 @@ jobs:
         name: validation-error-logs
         path: |
           *.log
+          debug_*.png
