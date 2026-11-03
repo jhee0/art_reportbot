@@ -308,18 +308,15 @@ class TaskworldSeleniumDownloader:
 
             print("➕ 조직 섹션 + 버튼 탐색 중...")
 
-            # + 버튼은 SVG 아이콘 (class="w-3.5 h-3.5")을 포함한 버튼
+            # + 버튼: <svg class="w-3.5 h-3.5"><path d="M12 4v16m8-8H4"/></svg> 를 포함한 버튼
+            # (× 버튼도 w-3.5 아이콘을 쓰므로 path 모양으로 '+'만 정확히 구분)
+            plus_path = "*[local-name()='path' and @d='M12 4v16m8-8H4']"
             plus_selectors = [
-                # SVG 클래스로 직접 찾고 부모 버튼 클릭
-                "//*[text()='조직']/following::*[.//*[contains(@class,'w-3.5')]][1]",
-                "//*[text()='조직']/following::button[.//*[contains(@class,'w-3.5')]][1]",
-                "//*[text()='조직']/following::button[1]",
-                "//*[text()='조직']/parent::*//button",
-                "//*[text()='조직']/parent::*/button",
-                # SVG 부모 요소 직접
-                "//svg[contains(@class,'w-3.5')]/parent::button",
-                "//svg[contains(@class,'w-3.5')]/parent::*[@role='button']",
-                "//svg[contains(@class,'w-3.5')]/parent::*",
+                f"//*[text()='조직']/following::button[.//{plus_path}][1]",
+                f"//*[text()='조직']/following::*[@role='button'][.//{plus_path}][1]",
+                f"//button[.//{plus_path}]",
+                f"//{plus_path}/ancestor::*[self::button or @role='button'][1]",
+                f"//{plus_path}/ancestor::*[local-name()='svg']/parent::*",
             ]
 
             plus_btn = None
