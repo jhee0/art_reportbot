@@ -411,6 +411,19 @@ class TaskworldSeleniumDownloader:
         try:
             print(f"📂 '아트실' 사이드바 메뉴 찾기...")
 
+            # 로그인 직후엔 '홈' 패널이 열려 있음. '조직' 섹션은 '업무' 패널에만 있으므로 먼저 이동
+            try:
+                work_menu = WebDriverWait(self.driver, 30).until(
+                    EC.presence_of_element_located((By.XPATH, "//nav[contains(@class,'rail-strip')]//a[@aria-label='업무']"))
+                )
+                try:
+                    work_menu.click()
+                except Exception:
+                    self.driver.execute_script("arguments[0].click();", work_menu)
+                print(f"✅ '업무' 메뉴 클릭 (현재 URL: {self.driver.current_url})")
+            except Exception as e:
+                print(f"⚠️ '업무' 메뉴 클릭 실패: {e}")
+
             # SPA라 URL 도착 후에도 사이드바가 늦게 그려질 수 있음 → 사이드바 렌더링 대기
             try:
                 WebDriverWait(self.driver, 30).until(
@@ -984,8 +997,16 @@ class TaskworldSeleniumDownloader:
             if err_match:
                 print(f"  🔎 [DEBUG:{label}] ⚠️ 크롬 네트워크 에러 감지: {err_match.group()}")
 
-            page_snippet = source[:4000].replace("\n", " ")
-            print(f"  🔎 [DEBUG:{label}] page_source (최대 4000자): {page_snippet}")
+            # <head>는 매번 같아서 의미 없음 → 사이드바 패널(업무 메뉴 영역) 위주로 출력
+            try:
+                panel = driver.find_element(By.XPATH, "//section[contains(@class,'rail-panel')]")
+                panel_html = panel.get_attribute("outerHTML")
+                panel_html = re.sub(r'<svg.*?</svg>', '<svg/>', panel_html, flags=re.S)
+                print(f"  🔎 [DEBUG:{label}] rail-panel HTML (최대 6000자): {panel_html[:6000]}")
+            except Exception:
+                body_idx = source.find("<body")
+                page_snippet = source[body_idx if body_idx >= 0 else 0:][:4000].replace("\n", " ")
+                print(f"  🔎 [DEBUG:{label}] page_source <body> (최대 4000자): {page_snippet}")
             print(f"  🔎 [DEBUG:{label}] page_source 총 길이: {len(source)}자")
         except Exception as e:
             print(f"  🔎 [DEBUG:{label}] 디버그 정보 수집 실패: {e}")
